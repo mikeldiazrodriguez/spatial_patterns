@@ -12,7 +12,7 @@ packages <- c("sf", "mapview", "spatstat.geom")
 ipak(packages)
 
 # set your working directory
-setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/shp")
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
 
 # add the study areas
 area_monforte  <- st_read("area_monforte.shp")
@@ -75,3 +75,22 @@ shapiro.test(random_sites_central$utmx)
 ks.test(sitesSubC$utmx,random_sites_central$utmx)
 
 
+
+# Person’s Correlation function
+## change your working directory
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/csv")
+
+# import data
+dat <- read.table(file="dat_monf.csv",header=TRUE, sep=";", stringsAsFactors=F, dec=".")
+
+# Data
+sample_data <- data.frame(v1=dat$altitude,v2=dat$wetland_cost,v3=dat$goat_cost,v5=dat$geology_cost,v6=dat$hydrology_cost,v7=dat$lcp_cost,v8=dat$eucl_dist_geo,v9=dat$eucl_dist_hydro,v10=dat$dif_ins,v11=dat$dir_ins,v12=dat$tot_ins,v13=dat$aspect,v14=dat$slope,v15=dat$vis_prom,v16=dat$tpi100,v17=dat$tpi500,v18=dat$tpi1000,v19=dat$wind)
+
+# Check correlations
+cor(sample_data)
+
+# Check correlations as scatterplots, distributions and correlation coefficient.
+ggpairs(sample_data)
+
+# Visualization
+ggcorr(sample_data, method=c("everything", "pearson"))
