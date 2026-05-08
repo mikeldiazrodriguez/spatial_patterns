@@ -8,7 +8,7 @@ ipak <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
 # usage
-packages <- c("sf", "mapview", "spatstat.geom")
+packages <- c("sf", "mapview", "spatstat.geom", "GGally", "ggplot2")
 ipak(packages)
 
 # set your working directory
@@ -81,10 +81,14 @@ ks.test(sitesSubC$utmx,random_sites_central$utmx)
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/csv")
 
 # import data
-dat <- read.table(file="dat_monf.csv",header=TRUE, sep=";", stringsAsFactors=F, dec=".")
+dat_monf  <- read.table("dat_monf.csv", header = TRUE, sep = ";", dec = ".", stringsAsFactors = FALSE)
+dat_north <- read.table("dat_north.csv", header = TRUE, sep = ";", dec = ".", stringsAsFactors = FALSE)
+dat_cent  <- read.table("dat_cent.csv", header = TRUE, sep = ";", dec = ".", stringsAsFactors = FALSE)
 
 # Data
-sample_data <- data.frame(v1=dat$altitude,v2=dat$wetland_cost,v3=dat$goat_cost,v5=dat$geology_cost,v6=dat$hydrology_cost,v7=dat$lcp_cost,v8=dat$eucl_dist_geo,v9=dat$eucl_dist_hydro,v10=dat$dif_ins,v11=dat$dir_ins,v12=dat$tot_ins,v13=dat$aspect,v14=dat$slope,v15=dat$vis_prom,v16=dat$tpi100,v17=dat$tpi500,v18=dat$tpi1000,v19=dat$wind)
+sample_monf  <- dat_monf[, vars]
+sample_north <- dat_north[, vars]
+sample_cent  <- dat_cent[, vars]
 
 # Check correlations
 cor(sample_data)
