@@ -85,16 +85,22 @@ dat_monf  <- read.table("dat_monf.csv", header = TRUE, sep = ";", dec = ".", str
 dat_north <- read.table("dat_north.csv", header = TRUE, sep = ";", dec = ".", stringsAsFactors = FALSE)
 dat_cent  <- read.table("dat_cent.csv", header = TRUE, sep = ";", dec = ".", stringsAsFactors = FALSE)
 
+vars <- c("altitude", "wetland_cost", "goat_cost", "geology_cost", 
+          "hydrology_cost", "lcp_cost", "eucl_dist_geo", "eucl_dist_hydro",
+          "dif_ins", "dir_ins", "tot_ins", "aspect", "slope", 
+          "vis_prom", "tpi100", "tpi500", "tpi1000", "wind")
+
+
 # Data
 sample_monf  <- dat_monf[, vars]
 sample_north <- dat_north[, vars]
 sample_cent  <- dat_cent[, vars]
 
 # Check correlations
-cor(sample_data)
+cor(sample_monf)
 
 # Check correlations as scatterplots, distributions and correlation coefficient.
-ggpairs(sample_data)
+ggpairs(sample_monf)
 
 # Visualization
-ggcorr(sample_data, method=c("everything", "pearson"))
+ggcorr(sample_monf, method=c("everything", "pearson"))
