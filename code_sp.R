@@ -98,9 +98,25 @@ sample_cent  <- dat_cent[, vars]
 
 # Check correlations
 cor(sample_monf)
+cor(sample_north)
+cor(sample_cent)
+
+# Export to csv
+cor_monf <- cor(sample_monf)
+write.csv2(cor_monf, file = "cor_monforte.csv", row.names = TRUE)
+
+cor_north <- cor(sample_north)
+write.csv2(cor_north, file = "cor_north.csv", row.names = TRUE)
+
+cor_cent <- cor(sample_cent)
+write.csv2(cor_cent, file = "cor_cent.csv", row.names = TRUE)
 
 # Check correlations as scatterplots, distributions and correlation coefficient.
 ggpairs(sample_monf)
+ggpairs(sample_north)
+ggpairs(sample_cent)
 
 # Visualization
 ggcorr(sample_monf, method=c("everything", "pearson"))
+ggcorr(sample_north, method=c("everything", "pearson"))
+ggcorr(sample_cent, method=c("everything", "pearson"))
