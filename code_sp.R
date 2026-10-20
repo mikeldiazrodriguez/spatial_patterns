@@ -602,7 +602,7 @@ print(results_monforte)
 # add the sites
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
 
-locations <- terra::vect("locations_monforte.shp")
+locations_monf <- terra::vect("locations_monforte.shp")
 
 ## raster directory
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
@@ -621,49 +621,47 @@ wetland_cost <- terra::project(terra::rast("WET_monforte.tiff"),  elevation)
 geol_cost    <- terra::project(terra::rast("GEOLC_monforte.tiff"),  elevation)
 hydro_cost   <- terra::project(terra::rast("HYDROC_monforte.tiff"), elevation)
 lcp_cost     <- terra::project(terra::rast("LCPC_monforte.tiff"),      elevation)
+cost_goats     <- terra::project(terra::rast("CPFPCGc_monforte.tif"),      elevation)
 
 
 ## create stack
-covariates <- c(elevation, tot_inso, aspect, slope, visual_prom, tpi100,
-                wetland_cost, geol_cost, hydro_cost, lcp_cost, wind)
+covariates_monf <- c(elevation, tot_inso, aspect, slope, visual_prom, tpi100,
+                wetland_cost, geol_cost, hydro_cost, lcp_cost, wind, cost_goats)
 
-names(covariates) <- c("elevation", "tot_inso", "aspect", "slope",
+names(covariates_monf) <- c("elevation", "tot_inso", "aspect", "slope",
                        "visual_prom", "tpi100", "wetland_cost",
-                       "geol_cost", "hydro_cost", "lcp_cost", "wind")
+                       "geol_cost", "hydro_cost", "lcp_cost", "wind", "cost_goats")
 
 ## extract values
-locvals <- as.data.frame(terra::extract(covariates, locations, ID = FALSE))
+locvals_monf <- as.data.frame(terra::extract(covariates_monf, locations_monf, ID = FALSE))
 
 ## Response variable: 1 if the point is an archaeological site
-locvals$site <- as.integer(locations$CID == 1)
+locvals_monf$site <- as.integer(locations_monf$CID == 1)
 
 ## fit de GLM
-mod <- glm(site ~ elevation + tot_inso + aspect + slope + visual_prom +
-             tpi100 + wetland_cost + geol_cost + hydro_cost + lcp_cost + wind,
-           data = locvals, family = binomial(link = "logit"), method = brglm2::brglmFit)
+mod_monf <- glm(site ~ elevation + tot_inso + aspect + slope + visual_prom +
+             tpi100 + wetland_cost + geol_cost + hydro_cost + lcp_cost + wind + cost_goats,
+           data = locvals_monf, family = binomial(link = "logit"), method = brglm2::brglmFit)
 
-summary(mod)
+summary(mod_monf)
 
 ## AIC selection
-mod2 <- step(mod, direction = "backward")
-mod2$anova
-summary(mod2)
-
-## log-odds (predict type = "link")
-logodds <- terra::predict(covariates, mod2, type = "link", na.rm = TRUE)
+mod2_monf <- step(mod_monf, direction = "backward")
+mod2_monf$anova
+summary(mod2_monf)
 
 ## relative probability (predict type = "response")
-relprob <- terra::predict(covariates, mod2, type = "response", na.rm = TRUE)
+relprob_monf <- terra::predict(covariates_monf, mod2_monf, type = "response", na.rm = TRUE)
 
 ## Visualization
-plot(relprob, col = terrain.colors(8, alpha = 1), legend = TRUE,
+plot(relprob_monf, col = terrain.colors(8, alpha = 1), legend = TRUE,
      axes = TRUE, main = "GLM Monforte")
-plot(locations[locations$CID == 1, ], pch = 19, cex = 0.3, col = "red", add = TRUE)
+plot(locations_monf[locations_monf$CID == 1, ], pch = 19, cex = 0.3, col = "red", add = TRUE)
 
 ## export surface
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs")
 
-terra::writeRaster(relprob,
+terra::writeRaster(relprob_monf,
                    filename = "predicsurface_monforte.asc",
                    filetype = "AAIGrid",
                    overwrite = TRUE)
@@ -675,7 +673,7 @@ terra::writeRaster(relprob,
 ## add the sites
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
 
-locations <- terra::vect("locations_northern.shp")
+locations_north <- terra::vect("locations_northern.shp")
 
 ## raster directory
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
@@ -692,56 +690,161 @@ vispr <- terra::project(terra::rast("VISPR_northern.tif"),     elevation)
 tpi100             <- terra::project(terra::rast("TPI100_northern.asc"),    elevation)
 wind             <- terra::project(terra::rast("WIND_northern.asc"),      elevation)
 wet      <- terra::project(terra::rast("WET_northern.tif"),       elevation)
-cost_goats       <- terra::project(terra::rast("CPFPCGc_northern.tif"),   elevation)
-cost_deers      <- terra::project(terra::rast("CPFPCDc_northern.tif"),   elevation)
 cost_geol     <- terra::project(terra::rast("GEOLC_northern.tif"),     elevation)
-coste_hydro   <- terra::project(terra::rast("HYDROC_northern.tif"),    elevation)
+cost_hydro   <- terra::project(terra::rast("HYDROC_northern.tif"),    elevation)
 lcpc        <- terra::project(terra::rast("LCPC_northern.tif"),      elevation)
 
 ## create stack
 covariates_north <- c(elevation, dif_ins, tot_ins, aspect,
                       slope, vispr, wind,
-                      wet, cost_goats, cost_deers,
-                      cost_geol, coste_hydro, lcpc, tpi100)
+                      wet,
+                      cost_geol, cost_hydro, lcpc, tpi100)
 
 names(covariates_north) <- c("elevation", "dif_ins", "tot_ins",
                              "aspect", "slope",
                              "vispr", "wind",
-                             "wet", "cost_goats", "cost_deers",
-                             "cost_geol", "coste_hydro", "lcpc", "tpi100")
+                             "wet",
+                             "cost_geol", "cost_hydro", "lcpc", "tpi100")
 
-locvals_north <- as.data.frame(terra::extract(covariates_north, locations, ID = FALSE))
-locvals_north$site <- as.integer(locations$CID == 1)
+locvals_north <- as.data.frame(terra::extract(covariates_north, locations_north, ID = FALSE))
+locvals_north$site <- as.integer(locations_north$CID == 1)
 
 ## fit de GLM
 mod_north <- glm(site ~ elevation + dif_ins + tot_ins + aspect +
                    slope + vispr + wind +
-                   wet + cost_goats + cost_deers +
-                   cost_geol + coste_hydro + lcpc + tpi100,
-                 data = locvals_north, family = binomial(link = "logit"),method = brglm2::brglmFit)
+                   wet +
+                   cost_geol + cost_hydro + lcpc + tpi100,
+                 data = locvals_north, family = binomial(link = "logit"),method = brglm2::brglmFit,
+                 control = brglm2::brglm_control(maxit = 200, epsilon = 1e-5))
 
 summary(mod_north)
 
 ## AIC selection
-mod2 <- step(mod, direction = "backward")
-mod2$anova
-summary(mod2)
-
-## log-odds (predict type = "link")
-logodds <- terra::predict(covariates, mod2, type = "link", na.rm = TRUE)
+mod2_north <- step(mod_north, direction = "backward") 
+mod2_north$anova
+summary(mod2_north)
 
 ## relative probability (predict type = "response")
-relprob <- terra::predict(covariates, mod2, type = "response", na.rm = TRUE)
+relprob_north <- terra::predict(covariates_north, mod2_north, type = "response", na.rm = TRUE)
 
 ## Visualization
 plot(relprob_north, col = terrain.colors(8, alpha = 1), legend = TRUE,
      axes = TRUE, main = "GLM Northern")
-plot(locations[locations$CID == 1, ],
+plot(locations_north[locations_north$CID == 1, ],
      pch = 19, cex = 0.3, col = "red", add = TRUE)
 
 ## export surface
-setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/outputs")
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs")
 terra::writeRaster(relprob_north,
                    filename = "predicsurface_northern.asc",
                    filetype = "AAIGrid",
                    overwrite = TRUE)
+
+
+# GLM Central Area
+
+## add the sites
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+
+locations_central <- terra::vect("locations_central.shp")
+
+## raster directory
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
+
+## add reference raster
+elevation <- terra::rast("ALTA_central.tif")
+
+## add rasters
+tot_ins         <- terra::project(terra::rast("TOTINS_central.asc"),    elevation)
+aspect        <- terra::project(terra::rast("ASP_central.tif"),       elevation)
+slope   <- terra::project(terra::rast("SLO_central.tif"),       elevation)
+vispr <- terra::project(terra::rast("VISPR_central.tif"),     elevation)
+tpi100             <- terra::project(terra::rast("TPI100_central.asc"),    elevation)
+wet      <- terra::project(terra::rast("WET_central.tif"),       elevation)
+cost_goats       <- terra::project(terra::rast("CPFPCGc_central.tif"),   elevation)
+cost_geol     <- terra::project(terra::rast("GEOLC_central.tif"),     elevation)
+cost_hydro   <- terra::project(terra::rast("HYDROC_central.tif"),    elevation)
+lcpc        <- terra::project(terra::rast("LCPC_central.tif"),      elevation)
+
+
+## create stack
+covariates_central <- c(elevation, tot_ins, aspect,
+                      slope, vispr,
+                      wet, cost_goats,
+                      cost_geol, cost_hydro, lcpc, tpi100)
+
+names(covariates_central) <- c("elevation", "tot_ins",
+                             "aspect", "slope",
+                             "vispr",
+                             "wet", "cost_goats",
+                             "cost_geol", "cost_hydro", "lcpc", "tpi100")
+
+locvals_central <- as.data.frame(terra::extract(covariates_central, locations_central, ID = FALSE))
+locvals_central$site <- as.integer(locations_central$CID == 1)
+
+## fit de GLM
+mod_central <- glm(site ~ elevation + tot_ins + aspect +
+                   slope + vispr +
+                   wet + cost_goats +
+                   cost_geol + cost_hydro + lcpc + tpi100,
+                 data = locvals_central, family = binomial(link = "logit"),method = brglm2::brglmFit)
+
+summary(mod_central)
+
+## AIC selection
+mod2_central <- step(mod_central, direction = "backward")
+mod2_central$anova
+summary(mod2_central)
+
+## relative probability (predict type = "response")
+relprob_central <- terra::predict(covariates_central, mod2_central, type = "response", na.rm = TRUE)
+
+## Visualization
+plot(relprob_central, col = terrain.colors(8, alpha = 1), legend = TRUE,
+     axes = TRUE, main = "GLM Central")
+plot(locations_central[locations_central$CID == 1, ],
+     pch = 19, cex = 0.3, col = "red", add = TRUE)
+
+## export surface
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs")
+terra::writeRaster(relprob_central,
+                   filename = "predicsurface_central.asc",
+                   filetype = "AAIGrid",
+                   overwrite = TRUE)
+
+
+## export results of three areas
+coef_all <- bind_rows(
+  tidy(mod2_monf)    %>% mutate(Zone = "Monforte"),
+  tidy(mod2_north)   %>% mutate(Zone = "Northern"),
+  tidy(mod2_central) %>% mutate(Zone = "Central")
+) %>%
+  relocate(Zone, .before = term) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 4)))
+
+summary_models <- tibble(
+  Zone        = c("Monforte", "Northern", "Central"),
+  AIC         = c(AIC(mod2_monf), AIC(mod2_north), AIC(mod2_central)),
+  Variables   = c(
+    paste(names(coef(mod2_monf))[-1], collapse = ", "),
+    paste(names(coef(mod2_north))[-1], collapse = ", "),
+    paste(names(coef(mod2_central))[-1], collapse = ", ")
+  ),
+  N_sites     = c(sum(locvals_monf$site == 1),
+                  sum(locvals_north$site == 1),
+                  sum(locvals_central$site == 1)),
+  N_random    = c(sum(locvals_monf$site == 0),
+                  sum(locvals_north$site == 0),
+                  sum(locvals_central$site == 0))
+) %>%
+  mutate(AIC = round(AIC, 2))
+
+print(summary_models)
+
+write_xlsx(
+  list(
+    Coefficients  = coef_all,
+    Summary       = summary_models
+  ),
+  path = "C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs/GLM_results_all_zones.xlsx"
+)
