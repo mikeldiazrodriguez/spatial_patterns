@@ -626,11 +626,11 @@ cost_goats     <- terra::project(terra::rast("CPFPCGc_monforte.tif"),      eleva
 
 ## create stack
 covariates_monf <- c(elevation, tot_inso, aspect, slope, visual_prom, tpi100,
-                wetland_cost, geol_cost, hydro_cost, lcp_cost, wind, cost_goats)
+                wetland_cost, geol_cost, hydro_cost, lcp_cost, wind)
 
 names(covariates_monf) <- c("elevation", "tot_inso", "aspect", "slope",
                        "visual_prom", "tpi100", "wetland_cost",
-                       "geol_cost", "hydro_cost", "lcp_cost", "wind", "cost_goats")
+                       "geol_cost", "hydro_cost", "lcp_cost", "wind")
 
 ## extract values
 locvals_monf <- as.data.frame(terra::extract(covariates_monf, locations_monf, ID = FALSE))
@@ -640,7 +640,7 @@ locvals_monf$site <- as.integer(locations_monf$CID == 1)
 
 ## fit de GLM
 mod_monf <- glm(site ~ elevation + tot_inso + aspect + slope + visual_prom +
-             tpi100 + wetland_cost + geol_cost + hydro_cost + lcp_cost + wind + cost_goats,
+             tpi100 + wetland_cost + geol_cost + hydro_cost + lcp_cost + wind,
            data = locvals_monf, family = binomial(link = "logit"), method = brglm2::brglmFit)
 
 summary(mod_monf)
@@ -664,8 +664,11 @@ setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_pattern
 terra::writeRaster(relprob_monf,
                    filename = "predicsurface_monforte.asc",
                    filetype = "AAIGrid",
+                   NAflag = -9999,
                    overwrite = TRUE)
 
+writeLines(terra::crs(relprob_monf, proj = TRUE),
+           "predicsurface_northern.prj")
 
 
 # GLM Northern Area
@@ -682,7 +685,6 @@ setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_pattern
 elevation <- terra::rast("ALTA_northern.tif")
 
 ## add rasters
-dif_ins        <- terra::project(terra::rast("DIFINS_northern.asc"),    elevation)
 tot_ins         <- terra::project(terra::rast("TOTINS_northern.asc"),    elevation)
 aspect        <- terra::project(terra::rast("ASP_northern.tif"),       elevation)
 slope   <- terra::project(terra::rast("SLO_northern.tif"),       elevation)
@@ -694,13 +696,14 @@ cost_geol     <- terra::project(terra::rast("GEOLC_northern.tif"),     elevation
 cost_hydro   <- terra::project(terra::rast("HYDROC_northern.tif"),    elevation)
 lcpc        <- terra::project(terra::rast("LCPC_northern.tif"),      elevation)
 
+
 ## create stack
-covariates_north <- c(elevation, dif_ins, tot_ins, aspect,
+covariates_north <- c(elevation, tot_ins, aspect,
                       slope, vispr, wind,
                       wet,
                       cost_geol, cost_hydro, lcpc, tpi100)
 
-names(covariates_north) <- c("elevation", "dif_ins", "tot_ins",
+names(covariates_north) <- c("elevation", "tot_ins",
                              "aspect", "slope",
                              "vispr", "wind",
                              "wet",
@@ -710,7 +713,7 @@ locvals_north <- as.data.frame(terra::extract(covariates_north, locations_north,
 locvals_north$site <- as.integer(locations_north$CID == 1)
 
 ## fit de GLM
-mod_north <- glm(site ~ elevation + dif_ins + tot_ins + aspect +
+mod_north <- glm(site ~ elevation + tot_ins + aspect +
                    slope + vispr + wind +
                    wet +
                    cost_geol + cost_hydro + lcpc + tpi100,
@@ -738,8 +741,11 @@ setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_pattern
 terra::writeRaster(relprob_north,
                    filename = "predicsurface_northern.asc",
                    filetype = "AAIGrid",
+                   NAflag = -9999,
                    overwrite = TRUE)
 
+writeLines(terra::crs(relprob_north, proj = TRUE),
+           "predicsurface_northern.prj")
 
 # GLM Central Area
 
@@ -761,7 +767,6 @@ slope   <- terra::project(terra::rast("SLO_central.tif"),       elevation)
 vispr <- terra::project(terra::rast("VISPR_central.tif"),     elevation)
 tpi100             <- terra::project(terra::rast("TPI100_central.asc"),    elevation)
 wet      <- terra::project(terra::rast("WET_central.tif"),       elevation)
-cost_goats       <- terra::project(terra::rast("CPFPCGc_central.tif"),   elevation)
 cost_geol     <- terra::project(terra::rast("GEOLC_central.tif"),     elevation)
 cost_hydro   <- terra::project(terra::rast("HYDROC_central.tif"),    elevation)
 lcpc        <- terra::project(terra::rast("LCPC_central.tif"),      elevation)
@@ -770,14 +775,14 @@ lcpc        <- terra::project(terra::rast("LCPC_central.tif"),      elevation)
 ## create stack
 covariates_central <- c(elevation, tot_ins, aspect,
                       slope, vispr,
-                      wet, cost_goats,
-                      cost_geol, cost_hydro, lcpc, tpi100)
+                      wet,
+                      cost_hydro, lcpc, tpi100, cost_geol)
 
 names(covariates_central) <- c("elevation", "tot_ins",
                              "aspect", "slope",
                              "vispr",
-                             "wet", "cost_goats",
-                             "cost_geol", "cost_hydro", "lcpc", "tpi100")
+                             "wet", 
+                             "cost_hydro", "lcpc", "tpi100", "cost_geol")
 
 locvals_central <- as.data.frame(terra::extract(covariates_central, locations_central, ID = FALSE))
 locvals_central$site <- as.integer(locations_central$CID == 1)
@@ -785,8 +790,8 @@ locvals_central$site <- as.integer(locations_central$CID == 1)
 ## fit de GLM
 mod_central <- glm(site ~ elevation + tot_ins + aspect +
                    slope + vispr +
-                   wet + cost_goats +
-                   cost_geol + cost_hydro + lcpc + tpi100,
+                   wet + 
+                   cost_hydro + lcpc + tpi100 + cost_geol,
                  data = locvals_central, family = binomial(link = "logit"),method = brglm2::brglmFit)
 
 summary(mod_central)
@@ -810,7 +815,11 @@ setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_pattern
 terra::writeRaster(relprob_central,
                    filename = "predicsurface_central.asc",
                    filetype = "AAIGrid",
+                   NAflag = -9999,
                    overwrite = TRUE)
+
+writeLines(terra::crs(relprob_central, proj = TRUE),
+           "predicsurface_central.prj")
 
 
 ## export results of three areas
