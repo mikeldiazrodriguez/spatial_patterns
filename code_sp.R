@@ -10,7 +10,7 @@ ipak <- function(pkg){
 # usage
 packages <- c("sf", "mapview", "spatstat.geom", "GGally", "ggplot2", "writexl",
               "dplyr", "broom", "purrr", "terra",
-              "foreach", "tibble", "magrittr", "tidyr")
+              "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2")
 ipak(packages)
 
 # set your working directory
@@ -187,109 +187,6 @@ WIND_northern <- raster("WIND_northern.asc")
 CPFPCGc_northern <- raster("CPFPCGc_northern.tif")
 
 CPFPCDc_northern <- raster("CPFPCDc_northern.tif")
-
-
-## ALTA
-
-### Create kernel density plot graph for the variable ALTA.
-
-
-## Extract cell site from the Northern area
-sites_northern_spdf <- SpatialPointsDataFrame(sites_northern, data.frame(sites_northern))
-
-
-sites_northern$`ALTA (m)` <-  
-  raster::extract(ALTA_northern, 
-                  sites_northern_spdf)
-
-raster_values <- terra::extract(ALTA_northern, spatstat.geom::coords(sitesSubN.ppp))
-sitesSubN$`ALTA (m)` <- raster_values[, 2]
-
-## Delete the grey theme
-theme_set(theme_bw())
-
-
-## Calculate the sites densities for Central area
-sites_northern_densities <- sitesSubN %$%
-  ALTA_northern %>%
-  density(from = 450, to = 766, n = 34) %>%
-  broom::tidy() %>%
-  tibble::as_tibble() %>%
-  dplyr::mutate(y = y * 34) %>%
-  dplyr::rename(ALTA = x,
-                Frequency = y)
-
-## Calculate possible densities across the study area using resampling
-background_ALTA_values <- ALTA_northern %>%
-  values() %>%
-  na.omit() # Drop all masked (NA) locations
-
-# Draw 999 random samples, and calculate their densities
-background_ALTA_densities <- foreach::foreach(n = 1:999, .combine = rbind) %do% {
-  background_ALTA_values %>%
-    sample(nrow(sitesSubN),
-           replace = FALSE) %>%
-    density(from = 53, to = 1054, n = 34) %>%
-    broom::tidy() %>%
-    tibble::as_tibble() %>%
-    dplyr::mutate(y = y * 34)
-} %>%
-  dplyr::group_by(x) %>%
-  purrrlyr::by_slice(function(x){
-    quantile(x$y, probs = c(0.025, 0.5, 0.975)) %>%
-      t() %>%
-      broom::tidy()
-  }, .collate = "cols") %>%
-  magrittr::set_names(c("ALTA", "Lower CI", "Frequency", "Upper CI"))
-
-# Plot distributions
-ggplot() +
-  geom_line(data = background_ALTA_densities,
-            mapping = aes(x = ALTA,
-                          y = Frequency)) +
-  geom_ribbon(data = background_ALTA_densities,
-              mapping = aes(x = ALTA,
-                            ymin = `Lower CI`,
-                            ymax = `Upper CI`),
-              alpha = 0.3) +
-  geom_line(data = sites_northern_densities,
-            mapping = aes(x = ALTA ,
-                          y = Frequency),
-            color = "red") +ggtitle("a. ALTA in Northern Mountain ranges")
-
-# Export the figure
-png(file = "~/output/FigureALTA-Northern.png",width = 1000,height = 437)
-dev.off()
-
-
-# Draw 999 random samples from background, and compute two-sample Wilcoxon tests (Mann-Whitney U tests)
-background_altitude_MWU <- foreach(n = 1:999, .combine = rbind) %do% {
-  background_sample <- background_ALTA_values %>%
-    sample(nrow(sites_northern),
-           replace = FALSE) %>%
-    wilcox.test(x = sites_northern$`ALTA (m)`,
-                y = .,
-                alternative = "greater",
-                exact = FALSE) %>%
-    broom::tidy() %>%
-    tibble::as_tibble()
-  
-} %>%
-  dplyr::select(statistic, p.value)
-
-
-# Get the median test statistic and 95% confidence interval
-background_altitude_MWU <- foreach::foreach(prob = c(0.025,0.5,0.975), .combine = rbind) %do% {
-  background_altitude_MWU %>%
-    dplyr::summarise_all(quantile, probs = prob)
-} %>%
-  t() %>%
-  magrittr::set_colnames(c("Lower CI","Median","Upper CI")) %>%
-  magrittr::set_rownames(c("U statistic","p-value"))
-
-
-
-round(background_altitude_MWU, 3)
 
 
 # Mann–Whitney U test - Northern area
@@ -560,7 +457,7 @@ results_northern <- analyse_area(
   n_iter       = 999
 )
 
-print(results_northern)
+print(results_central)
 
 
 
@@ -697,4 +594,154 @@ results_monforte <- analyse_area(
   n_iter       = 999
 )
 
-print(results_northern)
+print(results_monforte)
+
+
+# GLM Monforte
+
+# add the sites
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+
+locations <- terra::vect("locations_monforte.shp")
+
+## raster directory
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
+
+## add reference raster
+elevation <- terra::rast("ALTA_monforte.tif")
+
+## add rasters
+tot_inso    <- terra::project(terra::rast("TOTINS_monforte.asc"), elevation)
+aspect      <- terra::project(terra::rast("ASP_monforte.tif"),          elevation)
+slope       <- terra::project(terra::rast("SLO_monforte.tif"),           elevation)
+visual_prom <- terra::project(terra::rast("VISPR_monforte.tif"), elevation)
+tpi100      <- terra::project(terra::rast("TPI100_monforte.asc"),          elevation)
+wind        <- terra::project(terra::rast("WIND_monforte.asc"),            elevation)
+wetland_cost <- terra::project(terra::rast("WET_monforte.tiff"),  elevation)
+geol_cost    <- terra::project(terra::rast("GEOLC_monforte.tiff"),  elevation)
+hydro_cost   <- terra::project(terra::rast("HYDROC_monforte.tiff"), elevation)
+lcp_cost     <- terra::project(terra::rast("LCPC_monforte.tiff"),      elevation)
+
+
+## create stack
+covariates <- c(elevation, tot_inso, aspect, slope, visual_prom, tpi100,
+                wetland_cost, geol_cost, hydro_cost, lcp_cost, wind)
+
+names(covariates) <- c("elevation", "tot_inso", "aspect", "slope",
+                       "visual_prom", "tpi100", "wetland_cost",
+                       "geol_cost", "hydro_cost", "lcp_cost", "wind")
+
+## extract values
+locvals <- as.data.frame(terra::extract(covariates, locations, ID = FALSE))
+
+## Response variable: 1 if the point is an archaeological site
+locvals$site <- as.integer(locations$CID == 1)
+
+## fit de GLM
+mod <- glm(site ~ elevation + tot_inso + aspect + slope + visual_prom +
+             tpi100 + wetland_cost + geol_cost + hydro_cost + lcp_cost + wind,
+           data = locvals, family = binomial(link = "logit"), method = brglm2::brglmFit)
+
+summary(mod)
+
+## AIC selection
+mod2 <- step(mod, direction = "backward")
+mod2$anova
+summary(mod2)
+
+## log-odds (predict type = "link")
+logodds <- terra::predict(covariates, mod2, type = "link", na.rm = TRUE)
+
+## relative probability (predict type = "response")
+relprob <- terra::predict(covariates, mod2, type = "response", na.rm = TRUE)
+
+## Visualization
+plot(relprob, col = terrain.colors(8, alpha = 1), legend = TRUE,
+     axes = TRUE, main = "GLM Monforte")
+plot(locations[locations$CID == 1, ], pch = 19, cex = 0.3, col = "red", add = TRUE)
+
+## export surface
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs")
+
+terra::writeRaster(relprob,
+                   filename = "predicsurface_monforte.asc",
+                   filetype = "AAIGrid",
+                   overwrite = TRUE)
+
+
+
+# GLM Northern Area
+
+## add the sites
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+
+locations <- terra::vect("locations_northern.shp")
+
+## raster directory
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
+
+## add reference raster
+elevation <- terra::rast("ALTA_northern.tif")
+
+## add rasters
+dif_ins        <- terra::project(terra::rast("DIFINS_northern.asc"),    elevation)
+tot_ins         <- terra::project(terra::rast("TOTINS_northern.asc"),    elevation)
+aspect        <- terra::project(terra::rast("ASP_northern.tif"),       elevation)
+slope   <- terra::project(terra::rast("SLO_northern.tif"),       elevation)
+vispr <- terra::project(terra::rast("VISPR_northern.tif"),     elevation)
+tpi100             <- terra::project(terra::rast("TPI100_northern.asc"),    elevation)
+wind             <- terra::project(terra::rast("WIND_northern.asc"),      elevation)
+wet      <- terra::project(terra::rast("WET_northern.tif"),       elevation)
+cost_goats       <- terra::project(terra::rast("CPFPCGc_northern.tif"),   elevation)
+cost_deers      <- terra::project(terra::rast("CPFPCDc_northern.tif"),   elevation)
+cost_geol     <- terra::project(terra::rast("GEOLC_northern.tif"),     elevation)
+coste_hydro   <- terra::project(terra::rast("HYDROC_northern.tif"),    elevation)
+lcpc        <- terra::project(terra::rast("LCPC_northern.tif"),      elevation)
+
+## create stack
+covariates_north <- c(elevation, dif_ins, tot_ins, aspect,
+                      slope, vispr, wind,
+                      wet, cost_goats, cost_deers,
+                      cost_geol, coste_hydro, lcpc, tpi100)
+
+names(covariates_north) <- c("elevation", "dif_ins", "tot_ins",
+                             "aspect", "slope",
+                             "vispr", "wind",
+                             "wet", "cost_goats", "cost_deers",
+                             "cost_geol", "coste_hydro", "lcpc", "tpi100")
+
+locvals_north <- as.data.frame(terra::extract(covariates_north, locations, ID = FALSE))
+locvals_north$site <- as.integer(locations$CID == 1)
+
+## fit de GLM
+mod_north <- glm(site ~ elevation + dif_ins + tot_ins + aspect +
+                   slope + vispr + wind +
+                   wet + cost_goats + cost_deers +
+                   cost_geol + coste_hydro + lcpc + tpi100,
+                 data = locvals_north, family = binomial(link = "logit"),method = brglm2::brglmFit)
+
+summary(mod_north)
+
+## AIC selection
+mod2 <- step(mod, direction = "backward")
+mod2$anova
+summary(mod2)
+
+## log-odds (predict type = "link")
+logodds <- terra::predict(covariates, mod2, type = "link", na.rm = TRUE)
+
+## relative probability (predict type = "response")
+relprob <- terra::predict(covariates, mod2, type = "response", na.rm = TRUE)
+
+## Visualization
+plot(relprob_north, col = terrain.colors(8, alpha = 1), legend = TRUE,
+     axes = TRUE, main = "GLM Northern")
+plot(locations[locations$CID == 1, ],
+     pch = 19, cex = 0.3, col = "red", add = TRUE)
+
+## export surface
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/outputs")
+terra::writeRaster(relprob_north,
+                   filename = "predicsurface_northern.asc",
+                   filetype = "AAIGrid",
+                   overwrite = TRUE)
