@@ -10,7 +10,7 @@ ipak <- function(pkg){
 # usage
 packages <- c("sf", "mapview", "spatstat.geom", "GGally", "ggplot2", "writexl",
               "dplyr", "broom", "purrr", "terra",
-              "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2")
+              "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2", "pROC")
 ipak(packages)
 
 # set your working directory
@@ -671,6 +671,42 @@ writeLines(terra::crs(relprob_monf, proj = TRUE),
            "predicsurface_northern.prj")
 
 
+## Model Validation
+
+## Import validation sample
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+val_monf <- terra::vect("control_sample_monforte.shp")
+
+## Verification
+cat("=== Monforte: validation composition ===\n")
+print(table(val_monf$CID))
+cat("Total points:", nrow(val_monf), "\n\n")
+
+## Extract predictions from the raster
+val_pred_monf <- terra::extract(relprob_monf, val_monf, ID = FALSE)[, 1]
+
+cat("NA in predictions:", sum(is.na(val_pred_monf)), "\n\n")
+
+## Calculate sensitivity, specificity, and AUC
+pred_sites  <- val_pred_monf[val_monf$CID == 1]
+pred_random <- val_pred_monf[val_monf$CID == 0]
+
+sens <- mean(pred_sites  > 0.5, na.rm = TRUE) * 100
+spec <- mean(pred_random < 0.5, na.rm = TRUE) * 100
+
+cat("N validation sites:", length(pred_sites), "\n")
+cat("N validation control:", length(pred_random), "\n")
+cat("Sensibility (> 0.5):", round(sens, 1), "%\n")
+cat("Specificity (< 0.5):", round(spec, 1), "%\n")
+
+roc_obj <- roc(
+  response  = c(rep(1, length(pred_sites)), rep(0, length(pred_random))),
+  predictor = c(pred_sites, pred_random),
+  quiet     = TRUE
+)
+cat("AUC:", round(auc(roc_obj), 3), "\n")
+
+
 # GLM Northern Area
 
 ## add the sites
@@ -747,6 +783,44 @@ terra::writeRaster(relprob_north,
 writeLines(terra::crs(relprob_north, proj = TRUE),
            "predicsurface_northern.prj")
 
+
+## Model Validation
+
+## Import validation sample
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+val_north <- terra::vect("control_sample_northern.shp")
+
+## Verification
+cat("=== Northern: validation composition ===\n")
+print(table(val_north$CID))
+cat("Total points:", nrow(val_north), "\n\n")
+
+## Extract predictions from the raster
+val_pred_north <- terra::extract(relprob_north, val_north, ID = FALSE)[, 1]
+
+cat("NA in predictions:", sum(is.na(val_pred_north)), "\n\n")
+
+## Calculate sensitivity, specificity, and AUC
+pred_sites  <- val_pred_north[val_north$CID == 1]
+pred_random <- val_pred_north[val_north$CID == 0]
+
+sens <- mean(pred_sites  > 0.5, na.rm = TRUE) * 100
+spec <- mean(pred_random < 0.5, na.rm = TRUE) * 100
+
+cat("N validation sites:", length(pred_sites), "\n")
+cat("N validation control:", length(pred_random), "\n")
+cat("Sensibility (> 0.5):", round(sens, 1), "%\n")
+cat("Specificity (< 0.5):", round(spec, 1), "%\n")
+
+roc_obj <- roc(
+  response  = c(rep(1, length(pred_sites)), rep(0, length(pred_random))),
+  predictor = c(pred_sites, pred_random),
+  quiet     = TRUE
+)
+cat("AUC:", round(auc(roc_obj), 3), "\n")
+
+
+
 # GLM Central Area
 
 ## add the sites
@@ -776,13 +850,13 @@ lcpc        <- terra::project(terra::rast("LCPC_central.tif"),      elevation)
 covariates_central <- c(elevation, tot_ins, aspect,
                       slope, vispr,
                       wet,
-                      cost_hydro, lcpc, tpi100, cost_geol)
+                      cost_hydro, lcpc, tpi100)
 
 names(covariates_central) <- c("elevation", "tot_ins",
                              "aspect", "slope",
                              "vispr",
                              "wet", 
-                             "cost_hydro", "lcpc", "tpi100", "cost_geol")
+                             "cost_hydro", "lcpc", "tpi100")
 
 locvals_central <- as.data.frame(terra::extract(covariates_central, locations_central, ID = FALSE))
 locvals_central$site <- as.integer(locations_central$CID == 1)
@@ -791,7 +865,7 @@ locvals_central$site <- as.integer(locations_central$CID == 1)
 mod_central <- glm(site ~ elevation + tot_ins + aspect +
                    slope + vispr +
                    wet + 
-                   cost_hydro + lcpc + tpi100 + cost_geol,
+                   cost_hydro + lcpc + tpi100 ,
                  data = locvals_central, family = binomial(link = "logit"),method = brglm2::brglmFit)
 
 summary(mod_central)
@@ -820,6 +894,45 @@ terra::writeRaster(relprob_central,
 
 writeLines(terra::crs(relprob_central, proj = TRUE),
            "predicsurface_central.prj")
+
+
+## Model Validation
+
+## Import validation sample
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+val_central <- terra::vect("control_sample_central.shp")
+
+## Verification
+cat("=== Central: validation composition ===\n")
+print(table(val_central$CID))
+cat("Total points:", nrow(val_central), "\n\n")
+
+## Extract predictions from the raster
+val_pred_central <- terra::extract(relprob_central, val_central, ID = FALSE)[, 1]
+
+cat("NA in predictions:", sum(is.na(val_pred_central)), "\n\n")
+
+## Calculate sensitivity, specificity, and AUC
+pred_sites  <- val_pred_central[val_central$CID == 1]
+pred_random <- val_pred_central[val_central$CID == 0]
+
+sens <- mean(pred_sites  > 0.5, na.rm = TRUE) * 100
+spec <- mean(pred_random < 0.5, na.rm = TRUE) * 100
+
+cat("N validation sites:", length(pred_sites), "\n")
+cat("N validation control:", length(pred_random), "\n")
+cat("Sensibility (> 0.5):", round(sens, 1), "%\n")
+cat("Specificity (< 0.5):", round(spec, 1), "%\n")
+
+roc_obj <- roc(
+  response  = c(rep(1, length(pred_sites)), rep(0, length(pred_random))),
+  predictor = c(pred_sites, pred_random),
+  quiet     = TRUE
+)
+cat("AUC:", round(auc(roc_obj), 3), "\n")
+
+
+
 
 
 ## export results of three areas
@@ -857,3 +970,7 @@ write_xlsx(
   ),
   path = "C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs/GLM_results_all_zones.xlsx"
 )
+
+
+
+
