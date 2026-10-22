@@ -10,7 +10,7 @@ ipak <- function(pkg){
 # usage
 packages <- c("sf", "mapview", "spatstat.geom", "GGally", "ggplot2", "writexl",
               "dplyr", "broom", "purrr", "terra",
-              "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2", "pROC")
+              "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2", "pROC", "patchwork")
 ipak(packages)
 
 # set your working directory
@@ -737,13 +737,13 @@ lcpc        <- terra::project(terra::rast("LCPC_northern.tif"),      elevation)
 covariates_north <- c(elevation, tot_ins, aspect,
                       slope, vispr, wind,
                       wet,
-                      cost_geol, cost_hydro, lcpc, tpi100)
+                      cost_hydro, lcpc, tpi100, cost_geol)
 
 names(covariates_north) <- c("elevation", "tot_ins",
                              "aspect", "slope",
                              "vispr", "wind",
                              "wet",
-                             "cost_geol", "cost_hydro", "lcpc", "tpi100")
+                             "cost_hydro", "lcpc", "tpi100", "cost_geol")
 
 locvals_north <- as.data.frame(terra::extract(covariates_north, locations_north, ID = FALSE))
 locvals_north$site <- as.integer(locations_north$CID == 1)
@@ -751,8 +751,7 @@ locvals_north$site <- as.integer(locations_north$CID == 1)
 ## fit de GLM
 mod_north <- glm(site ~ elevation + tot_ins + aspect +
                    slope + vispr + wind +
-                   wet +
-                   cost_geol + cost_hydro + lcpc + tpi100,
+                   wet  + cost_hydro + lcpc + tpi100 +cost_geol,
                  data = locvals_north, family = binomial(link = "logit"),method = brglm2::brglmFit,
                  control = brglm2::brglm_control(maxit = 200, epsilon = 1e-5))
 
@@ -841,7 +840,6 @@ slope   <- terra::project(terra::rast("SLO_central.tif"),       elevation)
 vispr <- terra::project(terra::rast("VISPR_central.tif"),     elevation)
 tpi100             <- terra::project(terra::rast("TPI100_central.asc"),    elevation)
 wet      <- terra::project(terra::rast("WET_central.tif"),       elevation)
-cost_geol     <- terra::project(terra::rast("GEOLC_central.tif"),     elevation)
 cost_hydro   <- terra::project(terra::rast("HYDROC_central.tif"),    elevation)
 lcpc        <- terra::project(terra::rast("LCPC_central.tif"),      elevation)
 
@@ -973,4 +971,535 @@ write_xlsx(
 
 
 
+# Kernel Density Estimation - Northern area
 
+## add the sites
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+sites_north <- terra::vect("sites_northern.shp")
+
+## Kernel density Function + MWU for each variable
+kernel_density_plot <- function(raster_file, sites, variable_name,
+                                area_name, n_iter = 999, n_grid = 256) {
+  
+  r <- terra::rast(raster_file)
+  
+  ## Force sites to the raster CRS (removes [extract] transforming warning)
+  sites <- terra::project(sites, terra::crs(r))
+  
+  ## Sites values
+  site_values <- terra::extract(r, sites, ID = FALSE)[, 1]
+  site_values <- site_values[!is.na(site_values)]
+  n_sites <- length(site_values)
+  
+  ## Check variation (e.g., CPFPCDc all zero in Northern)
+  no_variation <- diff(range(site_values)) == 0
+  if (no_variation) {
+    warning("Variable ", variable_name, ": sites have no variation (all = ",
+            unique(site_values)[1], "). MWU will be skipped.")
+  }
+  
+  ## Background values (entire area, rasters already cropped)
+  background_values <- terra::values(r, mat = FALSE, na.rm = TRUE)
+  
+  ## Common range for density
+  rng <- range(background_values, na.rm = TRUE)
+  
+  ## Sites density
+  dens_sites <- density(site_values, from = rng[1], to = rng[2], n = n_grid)
+  sites_df <- data.frame(x = dens_sites$x, y = dens_sites$y * n_sites)
+  
+  ## 999 background simulations
+  bg_dens <- replicate(n_iter, {
+    sample_vals <- sample(background_values, n_sites, replace = FALSE)
+    d <- density(sample_vals, from = rng[1], to = rng[2], n = n_grid)
+    data.frame(x = d$x, y = d$y * n_sites)
+  }, simplify = FALSE)
+  
+  bg_df <- bind_rows(bg_dens) %>%
+    group_by(x) %>%
+    summarise(
+      lower  = quantile(y, 0.025),
+      median = quantile(y, 0.5),
+      upper  = quantile(y, 0.975),
+      .groups = "drop"
+    )
+  
+  ## Plot
+  p <- ggplot() +
+    geom_line(data = bg_df, aes(x = x, y = median)) +
+    geom_ribbon(data = bg_df, aes(x = x, ymin = lower, ymax = upper),
+                alpha = 0.3) +
+    geom_line(data = sites_df, aes(x = x, y = y), color = "red") +
+    labs(title = paste0(variable_name, " in ", area_name),
+         x = variable_name, y = "Frequency") +
+    theme_bw()
+  
+  ## MWU companion (skipped if no variation)
+  if (no_variation) {
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = c(NA_real_, NA_real_),
+      Median = c(NA_real_, NA_real_),
+      Upper  = c(NA_real_, NA_real_)
+    )
+  } else {
+    mwu <- replicate(n_iter, {
+      sample_vals <- sample(background_values, n_sites, replace = FALSE)
+      wilcox.test(x = site_values, y = sample_vals,
+                  alternative = "two.sided", exact = FALSE) %>%
+        broom::tidy()
+    }, simplify = FALSE) %>%
+      bind_rows()
+    
+    mwu <- mwu[, c("statistic", "p.value")]   # subsetting, evita terra::select
+    
+    ## Safety net: drop any non-finite values
+    mwu_clean <- mwu[is.finite(mwu$statistic) & is.finite(mwu$p.value), ]
+    
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = as.numeric(c(quantile(mwu_clean$statistic, 0.025, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.025, na.rm = TRUE))),
+      Median = as.numeric(c(median(mwu_clean$statistic, na.rm = TRUE),
+                            median(mwu_clean$p.value,   na.rm = TRUE))),
+      Upper  = as.numeric(c(quantile(mwu_clean$statistic, 0.975, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.975, na.rm = TRUE)))
+    )
+  }
+  
+  list(plot = p, mwu = mwu_summary, sites = sites_df, background = bg_df)
+}
+
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
+
+## List of variables (19)
+variables <- list(
+  ALTA    = "ALTA_northern.tif",
+  TPI100  = "TPI100_northern.asc",
+  TPI500  = "TPI500_northern.asc",
+  TPI1000 = "TPI1000_northern.asc",
+  SLO     = "SLO_northern.tif",
+  ASP     = "ASP_northern.tif",
+  HYDROE  = "HYDROE_northern.tif",
+  HYDROC  = "HYDROC_northern.tif",
+  WET     = "WET_northern.tif",
+  GEOLE   = "GEOLE_northern.tif",
+  GEOLC   = "GEOLC_northern.tif",
+  VISPR   = "VISPR_northern.tif",
+  LCPC    = "LCPC_northern.tif",
+  TOTINS  = "TOTINS_northern.asc",
+  DIRINS  = "DIRINS_northern.asc",
+  DIFINS  = "DIFINS_northern.asc",
+  WIND    = "WIND_northern.asc",
+  CPFPCGc = "CPFPCGc_northern.tif",
+  CPFPCDc = "CPFPCDc_northern.tif"
+)
+
+## Run for all variables
+set.seed(123)
+results_north <- lapply(names(variables), function(v) {
+  cat("Processing:", v, "\n")
+  kernel_density_plot(variables[[v]], sites_north, v, "Northern")
+})
+names(results_north) <- names(variables)
+
+## Save individual figures
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs")
+for (v in names(results_north)) {
+  ggsave(paste0("Figure", v, "-Northern.png"),
+         plot = results_north[[v]]$plot,
+         width = 8, height = 4, dpi = 150)
+}
+
+## Save MWU results (companion of the plots)
+mwu_table <- bind_rows(
+  lapply(names(results_north), function(v) {
+    results_north[[v]]$mwu %>% mutate(Variable = v, .before = 1)
+  })
+)
+write.csv(mwu_table, "MWU_kernel_northern.csv", row.names = FALSE)
+
+## Composite figures - 4 panels: 5 + 5 + 5 + 4
+vars_all <- names(results_north)
+
+groups <- list(
+  Part1 = vars_all[1:5],
+  Part2 = vars_all[6:10],
+  Part3 = vars_all[11:15],
+  Part4 = vars_all[16:19]
+)
+
+for (g in names(groups)) {
+  plots_g <- lapply(groups[[g]], function(v) {
+    results_north[[v]]$plot +
+      theme(legend.position = "none")
+  })
+  
+  combined <- wrap_plots(plots_g, ncol = 2) +
+    plot_annotation(tag_levels = "a")
+  
+  ggsave(
+    filename = paste0("FigureS_KDE_Northern_", g, ".png"),
+    plot     = combined,
+    width    = 12,
+    height   = 10,
+    dpi      = 300
+  )
+}
+
+cat("\n=== Composite figures saved in:\n", getwd(), "\n")
+
+
+
+# Kernel Density Estimation - Monforte
+
+## add the sites
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+sites_monf <- terra::vect("sites_monforte.shp")
+
+## Kernel density Function + MWU for each variable
+kernel_density_plot <- function(raster_file, sites, variable_name,
+                                area_name, n_iter = 999, n_grid = 256) {
+  
+  r <- terra::rast(raster_file)
+  
+  ## Force sites to the raster CRS
+  sites <- terra::project(sites, terra::crs(r))
+  
+  ## Sites values
+  site_values <- terra::extract(r, sites, ID = FALSE)[, 1]
+  site_values <- site_values[!is.na(site_values)]
+  n_sites <- length(site_values)
+  
+  ## Check variation
+  no_variation <- diff(range(site_values)) == 0
+  if (no_variation) {
+    warning("Variable ", variable_name, ": sites have no variation (all = ",
+            unique(site_values)[1], "). MWU will be skipped.")
+  }
+  
+  ## Background values
+  background_values <- terra::values(r, mat = FALSE, na.rm = TRUE)
+  rng <- range(background_values, na.rm = TRUE)
+  
+  ## Sites density
+  dens_sites <- density(site_values, from = rng[1], to = rng[2], n = n_grid)
+  sites_df <- data.frame(x = dens_sites$x, y = dens_sites$y * n_sites)
+  
+  ## 999 background simulations
+  bg_dens <- replicate(n_iter, {
+    sample_vals <- sample(background_values, n_sites, replace = FALSE)
+    d <- density(sample_vals, from = rng[1], to = rng[2], n = n_grid)
+    data.frame(x = d$x, y = d$y * n_sites)
+  }, simplify = FALSE)
+  
+  bg_df <- bind_rows(bg_dens) %>%
+    group_by(x) %>%
+    summarise(
+      lower  = quantile(y, 0.025),
+      median = quantile(y, 0.5),
+      upper  = quantile(y, 0.975),
+      .groups = "drop"
+    )
+  
+  ## Plot
+  p <- ggplot() +
+    geom_line(data = bg_df, aes(x = x, y = median)) +
+    geom_ribbon(data = bg_df, aes(x = x, ymin = lower, ymax = upper),
+                alpha = 0.3) +
+    geom_line(data = sites_df, aes(x = x, y = y), color = "red") +
+    labs(title = paste0(variable_name, " in ", area_name),
+         x = variable_name, y = "Frequency") +
+    theme_bw()
+  
+  ## MWU companion
+  if (no_variation) {
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = c(NA_real_, NA_real_),
+      Median = c(NA_real_, NA_real_),
+      Upper  = c(NA_real_, NA_real_)
+    )
+  } else {
+    mwu <- replicate(n_iter, {
+      sample_vals <- sample(background_values, n_sites, replace = FALSE)
+      wilcox.test(x = site_values, y = sample_vals,
+                  alternative = "two.sided", exact = FALSE) %>%
+        broom::tidy()
+    }, simplify = FALSE) %>%
+      bind_rows()
+    
+    mwu <- mwu[, c("statistic", "p.value")]
+    mwu_clean <- mwu[is.finite(mwu$statistic) & is.finite(mwu$p.value), ]
+    
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = as.numeric(c(quantile(mwu_clean$statistic, 0.025, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.025, na.rm = TRUE))),
+      Median = as.numeric(c(median(mwu_clean$statistic, na.rm = TRUE),
+                            median(mwu_clean$p.value,   na.rm = TRUE))),
+      Upper  = as.numeric(c(quantile(mwu_clean$statistic, 0.975, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.975, na.rm = TRUE)))
+    )
+  }
+  
+  list(plot = p, mwu = mwu_summary, sites = sites_df, background = bg_df)
+}
+
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
+
+## List of variables (19)
+variables <- list(
+  ALTA    = "ALTA_monforte.tif",
+  TPI100  = "TPI100_monforte.asc",
+  TPI500  = "TPI500_monforte.asc",
+  TPI1000 = "TPI1000_monforte.asc",
+  SLO     = "SLO_monforte.tif",
+  ASP     = "ASP_monforte.tif",
+  HYDROE  = "HYDROE_monforte.tif",
+  HYDROC  = "HYDROC_monforte.tiff",     
+  WET     = "WET_monforte.tiff",        
+  GEOLE   = "GEOLE_monforte.tif",
+  GEOLC   = "GEOLC_monforte.tiff",      
+  VISPR   = "VISPR_monforte.tif",
+  LCPC    = "LCPC_monforte.tiff",       
+  TOTINS  = "TOTINS_monforte.asc",
+  DIRINS  = "DIRINS_monforte.asc",
+  DIFINS  = "DIFINS_monforte.asc",
+  WIND    = "WIND_monforte.asc",
+  CPFPCGc = "CPFPCGc_monforte.tif",
+  CPFPCDc = "CPFPCDc_monforte.tif"
+)
+
+## Run for all variables
+set.seed(123)
+results_monf <- lapply(names(variables), function(v) {
+  cat("Processing:", v, "\n")
+  kernel_density_plot(variables[[v]], sites_monf, v, "Monforte")
+})
+names(results_monf) <- names(variables)
+
+## Save individual figures
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs")
+for (v in names(results_monf)) {
+  ggsave(paste0("Figure", v, "-Monforte.png"),
+         plot = results_monf[[v]]$plot,
+         width = 8, height = 4, dpi = 150)
+}
+
+## Save MWU results
+mwu_table_monf <- bind_rows(
+  lapply(names(results_monf), function(v) {
+    results_monf[[v]]$mwu %>% mutate(Variable = v, .before = 1)
+  })
+)
+write.csv(mwu_table_monf, "MWU_kernel_monforte.csv", row.names = FALSE)
+
+
+## Composite figures - 4 panels: 5 + 5 + 5 + 4
+vars_all <- names(results_monf)
+
+groups <- list(
+  Part1 = vars_all[1:5],
+  Part2 = vars_all[6:10],
+  Part3 = vars_all[11:15],
+  Part4 = vars_all[16:19]
+)
+
+for (g in names(groups)) {
+  plots_g <- lapply(groups[[g]], function(v) {
+    results_monf[[v]]$plot +
+      theme(legend.position = "none")
+  })
+  
+  combined <- wrap_plots(plots_g, ncol = 2) +
+    plot_annotation(tag_levels = "a")
+  
+  ggsave(
+    filename = paste0("FigureS_KDE_Monforte_", g, ".png"),
+    plot     = combined,
+    width    = 12,
+    height   = 10,
+    dpi      = 300
+  )
+}
+
+cat("\n=== Composite figures saved in:\n", getwd(), "\n")
+
+
+
+
+# Kernel Density Estimation - Central
+
+## add the sites
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+sites_central <- terra::vect("sites_central.shp")
+
+## Kernel density Function + MWU for each variable
+kernel_density_plot <- function(raster_file, sites, variable_name,
+                                area_name, n_iter = 999, n_grid = 256) {
+  
+  r <- terra::rast(raster_file)
+  
+  ## Force sites to the raster CRS
+  sites <- terra::project(sites, terra::crs(r))
+  
+  ## Sites values
+  site_values <- terra::extract(r, sites, ID = FALSE)[, 1]
+  site_values <- site_values[!is.na(site_values)]
+  n_sites <- length(site_values)
+  
+  ## Check variation
+  no_variation <- diff(range(site_values)) == 0
+  if (no_variation) {
+    warning("Variable ", variable_name, ": sites have no variation (all = ",
+            unique(site_values)[1], "). MWU will be skipped.")
+  }
+  
+  ## Background values
+  background_values <- terra::values(r, mat = FALSE, na.rm = TRUE)
+  rng <- range(background_values, na.rm = TRUE)
+  
+  ## Sites density
+  dens_sites <- density(site_values, from = rng[1], to = rng[2], n = n_grid)
+  sites_df <- data.frame(x = dens_sites$x, y = dens_sites$y * n_sites)
+  
+  ## 999 background simulations
+  bg_dens <- replicate(n_iter, {
+    sample_vals <- sample(background_values, n_sites, replace = FALSE)
+    d <- density(sample_vals, from = rng[1], to = rng[2], n = n_grid)
+    data.frame(x = d$x, y = d$y * n_sites)
+  }, simplify = FALSE)
+  
+  bg_df <- bind_rows(bg_dens) %>%
+    group_by(x) %>%
+    summarise(
+      lower  = quantile(y, 0.025),
+      median = quantile(y, 0.5),
+      upper  = quantile(y, 0.975),
+      .groups = "drop"
+    )
+  
+  ## Plot
+  p <- ggplot() +
+    geom_line(data = bg_df, aes(x = x, y = median)) +
+    geom_ribbon(data = bg_df, aes(x = x, ymin = lower, ymax = upper),
+                alpha = 0.3) +
+    geom_line(data = sites_df, aes(x = x, y = y), color = "red") +
+    labs(title = paste0(variable_name, " in ", area_name),
+         x = variable_name, y = "Frequency") +
+    theme_bw()
+  
+  ## MWU companion
+  if (no_variation) {
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = c(NA_real_, NA_real_),
+      Median = c(NA_real_, NA_real_),
+      Upper  = c(NA_real_, NA_real_)
+    )
+  } else {
+    mwu <- replicate(n_iter, {
+      sample_vals <- sample(background_values, n_sites, replace = FALSE)
+      wilcox.test(x = site_values, y = sample_vals,
+                  alternative = "two.sided", exact = FALSE) %>%
+        broom::tidy()
+    }, simplify = FALSE) %>%
+      bind_rows()
+    
+    mwu <- mwu[, c("statistic", "p.value")]
+    mwu_clean <- mwu[is.finite(mwu$statistic) & is.finite(mwu$p.value), ]
+    
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = as.numeric(c(quantile(mwu_clean$statistic, 0.025, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.025, na.rm = TRUE))),
+      Median = as.numeric(c(median(mwu_clean$statistic, na.rm = TRUE),
+                            median(mwu_clean$p.value,   na.rm = TRUE))),
+      Upper  = as.numeric(c(quantile(mwu_clean$statistic, 0.975, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.975, na.rm = TRUE)))
+    )
+  }
+  
+  list(plot = p, mwu = mwu_summary, sites = sites_df, background = bg_df)
+}
+
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
+
+## List of variables (19) — AJUSTA EXTENSIONES SEGÚN PASO 0
+variables <- list(
+  ALTA    = "ALTA_central.tif",
+  TPI100  = "TPI100_central.asc",
+  TPI500  = "TPI500_central.asc",
+  TPI1000 = "TPI1000_central.asc",
+  SLO     = "SLO_central.tif",
+  ASP     = "ASP_central.tif",
+  HYDROE  = "HYDROE_central.tif",
+  HYDROC  = "HYDROC_central.tif",
+  WET     = "WET_central.tif",
+  GEOLE   = "GEOLE_central.tif",
+  GEOLC   = "GEOLC_central.tif",
+  VISPR   = "VISPR_central.tif",
+  LCPC    = "LCPC_central.tif",
+  TOTINS  = "TOTINS_central.asc",
+  DIRINS  = "DIRINS_central.asc",
+  DIFINS  = "DIFINS_central.asc",
+  WIND    = "WIND_central.asc",
+  CPFPCGc = "CPFPCGc_central.tif",
+  CPFPCDc = "CPFPCDc_central.tif"
+)
+
+## Run for all variables
+set.seed(123)
+results_central <- lapply(names(variables), function(v) {
+  cat("Processing:", v, "\n")
+  kernel_density_plot(variables[[v]], sites_central, v, "Central")
+})
+names(results_central) <- names(variables)
+
+## Save individual figures
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs")
+for (v in names(results_central)) {
+  ggsave(paste0("Figure", v, "-Central.png"),
+         plot = results_central[[v]]$plot,
+         width = 8, height = 4, dpi = 150)
+}
+
+## Save MWU results
+mwu_table_central <- bind_rows(
+  lapply(names(results_central), function(v) {
+    results_central[[v]]$mwu %>% mutate(Variable = v, .before = 1)
+  })
+)
+write.csv(mwu_table_central, "MWU_kernel_central.csv", row.names = FALSE)
+
+
+## Composite figures - 4 panels: 5 + 5 + 5 + 4
+vars_all <- names(results_central)
+
+groups <- list(
+  Part1 = vars_all[1:5],
+  Part2 = vars_all[6:10],
+  Part3 = vars_all[11:15],
+  Part4 = vars_all[16:19]
+)
+
+for (g in names(groups)) {
+  plots_g <- lapply(groups[[g]], function(v) {
+    results_central[[v]]$plot +
+      theme(legend.position = "none")
+  })
+  
+  combined <- wrap_plots(plots_g, ncol = 2) +
+    plot_annotation(tag_levels = "a")
+  
+  ggsave(
+    filename = paste0("FigureS_KDE_Central_", g, ".png"),
+    plot     = combined,
+    width    = 12,
+    height   = 10,
+    dpi      = 300
+  )
+}
+
+cat("\n=== Composite figures saved in:\n", getwd(), "\n")
