@@ -10,7 +10,8 @@ ipak <- function(pkg){
 # usage
 packages <- c("sf", "mapview", "spatstat.geom", "GGally", "writexl",
               "dplyr", "broom", "purrr", "terra", "tidyterra", "ggplot2",
-              "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2", "pROC", "patchwork")
+              "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2", 
+              "pROC", "patchwork", "cowplot", "ggspatial")
 ipak(packages)
 
 # set your working directory
@@ -972,85 +973,121 @@ write_xlsx(
 
 ## Export predictive maps Figure 
 
+## Ensure validation samples are loaded (adjust paths if necessary)
+# val_monf    <- terra::vect("control_sample_monforte.shp")
+# val_north   <- terra::vect("control_sample_northern.shp")
+# val_central <- terra::vect("control_sample_central.shp")
+
 ## Rename layers
 names(relprob_monf)    <- "probability"
 names(relprob_north)   <- "probability"
 names(relprob_central) <- "probability"
 
-## Convert sites to data.frame
-sites_monf_df    <- as.data.frame(locations_monf[locations_monf$CID == 1, ],    geom = "XY")
-sites_north_df   <- as.data.frame(locations_north[locations_north$CID == 1, ],  geom = "XY")
-sites_central_df <- as.data.frame(locations_central[locations_central$CID == 1, ], geom = "XY")
+## Convert training sites to data.frame (CID == 1)
+train_monf_df    <- as.data.frame(locations_monf[locations_monf$CID == 1, ],       geom = "XY")
+train_north_df   <- as.data.frame(locations_north[locations_north$CID == 1, ],     geom = "XY")
+train_central_df <- as.data.frame(locations_central[locations_central$CID == 1, ], geom = "XY")
 
-## Palette and common scale
+## Convert control sites to data.frame (CID == 1)
+control_monf_df    <- as.data.frame(val_monf[val_monf$CID == 1, ],       geom = "XY")
+control_north_df   <- as.data.frame(val_north[val_north$CID == 1, ],     geom = "XY")
+control_central_df <- as.data.frame(val_central[val_central$CID == 1, ], geom = "XY")
 
-pal_rust <- c("#4A5D23", "#8FA25C", "#C6D2A8", "#E8ECD8", "#FFFFFF")
+## Palette and common scales
+pal_arcmap <- c("#7ACBC0", "#E5D598", "#D4D4D4", "#FFFFFF")
 
 common_fill <- scale_fill_gradientn(
-  colors = pal_rust,
+  colors = pal_arcmap,
   limits = c(0, 1),
   na.value = "transparent",
-  name   = "Probability"
+  name   = "GLM"
 )
 
+## Color scale for training and control points
+common_color <- scale_color_manual(
+  values = c("Training sample" = "black", "Control sample" = "red"),
+  name   = NULL
+)
+
+## Common theme (we removed the title alignment here since titles are handled by cowplot)
 common_theme <- theme_minimal(base_size = 10) +
   theme(
     panel.grid   = element_blank(),
     axis.title   = element_blank(),
-    axis.text    = element_text(size = 7),
-    plot.title   = element_text(face = "bold", hjust = 0.5),
+    axis.text    = element_blank(),        
+    axis.ticks   = element_blank(),        
     legend.position = "right"
   )
 
-## Maps
+## Maps (Remove labs(title) from all three)
 p_monf <- ggplot() +
   geom_spatraster(data = relprob_monf, aes(fill = probability)) +
   common_fill +
-  geom_point(data = sites_monf_df, aes(x = x, y = y),
-             color = "red", size = 0.6, shape = 19) +
+  geom_point(data = train_monf_df, aes(x = x, y = y, color = "Training sample"), size = 0.8, shape = 19) +
+  geom_point(data = control_monf_df, aes(x = x, y = y, color = "Control sample"), size = 0.8, shape = 19) +
+  common_color +
   coord_sf(expand = FALSE) +
-  labs(title = "Monforte de Lemos basin") +
-  common_theme
+  common_theme +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true",
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"),
+                         style = north_arrow_fancy_orienteering)
 
 p_north <- ggplot() +
   geom_spatraster(data = relprob_north, aes(fill = probability)) +
   common_fill +
-  geom_point(data = sites_north_df, aes(x = x, y = y),
-             color = "red", size = 0.6, shape = 19) +
+  geom_point(data = train_north_df, aes(x = x, y = y, color = "Training sample"), size = 0.8, shape = 19) +
+  geom_point(data = control_north_df, aes(x = x, y = y, color = "Control sample"), size = 0.8, shape = 19) +
+  common_color +
   coord_sf(expand = FALSE) +
-  labs(title = "Northern Mountain ranges") +
-  common_theme
+  common_theme +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true",
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"),
+                         style = north_arrow_fancy_orienteering)
 
 p_central <- ggplot() +
   geom_spatraster(data = relprob_central, aes(fill = probability)) +
   common_fill +
-  geom_point(data = sites_central_df, aes(x = x, y = y),
-             color = "red", size = 0.6, shape = 19) +
+  geom_point(data = train_central_df, aes(x = x, y = y, color = "Training sample"), size = 0.8, shape = 19) +
+  geom_point(data = control_central_df, aes(x = x, y = y, color = "Control sample"), size = 0.8, shape = 19) +
+  common_color +
   coord_sf(expand = FALSE) +
-  labs(title = "Central Mountain ranges") +
-  common_theme
+  common_theme +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true",
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"),
+                         style = north_arrow_fancy_orienteering)
 
-## Composition
-# Opción A: lado a lado (una fila), leyenda compartida
-combined <- (p_monf | p_north | p_central) +
-  plot_layout(guides = "collect") +
-  plot_annotation(tag_levels = "a")
+## Composition (Combine letter and title in the labels argument)
+combined <- plot_grid(
+  p_monf, p_north, p_central,
+  nrow = 1,
+  labels = c("a   Monforte de Lemos basin",
+             "b   Northern Mountain ranges",
+             "c   Central Mountain ranges"),
+  label_size = 12,
+  label_fontface = "bold",
+  hjust = 0,   # Aligns text to the left
+  vjust = 1    # Aligns text to the top
+)
 
-## Save
+## Save PNG
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs")
 
 ggsave("Figure_GLM_maps_composite.png",
        plot   = combined,
-       width  = 15,
-       height = 5,
+       width  = 18,
+       height = 6,
+       units  = "in",
        dpi    = 300)
 
-## PDF
+## Save PDF
 ggsave("Figure_GLM_maps_composite.pdf",
        plot   = combined,
-       width  = 15,
-       height = 5)
-
+       width  = 18,
+       height = 6,
+       units  = "in")
 
 
 # Kernel Density Estimation - Northern area
