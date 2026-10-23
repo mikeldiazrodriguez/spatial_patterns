@@ -8,8 +8,8 @@ ipak <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
 # usage
-packages <- c("sf", "mapview", "spatstat.geom", "GGally", "ggplot2", "writexl",
-              "dplyr", "broom", "purrr", "terra",
+packages <- c("sf", "mapview", "spatstat.geom", "GGally", "writexl",
+              "dplyr", "broom", "purrr", "terra", "tidyterra", "ggplot2",
               "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2", "pROC", "patchwork")
 ipak(packages)
 
@@ -968,6 +968,88 @@ write_xlsx(
   ),
   path = "C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs/GLM_results_all_zones.xlsx"
 )
+
+
+## Export predictive maps Figure 
+
+## Rename layers
+names(relprob_monf)    <- "probability"
+names(relprob_north)   <- "probability"
+names(relprob_central) <- "probability"
+
+## Convert sites to data.frame
+sites_monf_df    <- as.data.frame(locations_monf[locations_monf$CID == 1, ],    geom = "XY")
+sites_north_df   <- as.data.frame(locations_north[locations_north$CID == 1, ],  geom = "XY")
+sites_central_df <- as.data.frame(locations_central[locations_central$CID == 1, ], geom = "XY")
+
+## Palette and common scale
+
+pal_rust <- c("#4A5D23", "#8FA25C", "#C6D2A8", "#E8ECD8", "#FFFFFF")
+
+common_fill <- scale_fill_gradientn(
+  colors = pal_rust,
+  limits = c(0, 1),
+  na.value = "transparent",
+  name   = "Probability"
+)
+
+common_theme <- theme_minimal(base_size = 10) +
+  theme(
+    panel.grid   = element_blank(),
+    axis.title   = element_blank(),
+    axis.text    = element_text(size = 7),
+    plot.title   = element_text(face = "bold", hjust = 0.5),
+    legend.position = "right"
+  )
+
+## Maps
+p_monf <- ggplot() +
+  geom_spatraster(data = relprob_monf, aes(fill = probability)) +
+  common_fill +
+  geom_point(data = sites_monf_df, aes(x = x, y = y),
+             color = "red", size = 0.6, shape = 19) +
+  coord_sf(expand = FALSE) +
+  labs(title = "Monforte de Lemos basin") +
+  common_theme
+
+p_north <- ggplot() +
+  geom_spatraster(data = relprob_north, aes(fill = probability)) +
+  common_fill +
+  geom_point(data = sites_north_df, aes(x = x, y = y),
+             color = "red", size = 0.6, shape = 19) +
+  coord_sf(expand = FALSE) +
+  labs(title = "Northern Mountain ranges") +
+  common_theme
+
+p_central <- ggplot() +
+  geom_spatraster(data = relprob_central, aes(fill = probability)) +
+  common_fill +
+  geom_point(data = sites_central_df, aes(x = x, y = y),
+             color = "red", size = 0.6, shape = 19) +
+  coord_sf(expand = FALSE) +
+  labs(title = "Central Mountain ranges") +
+  common_theme
+
+## Composition
+# Opción A: lado a lado (una fila), leyenda compartida
+combined <- (p_monf | p_north | p_central) +
+  plot_layout(guides = "collect") +
+  plot_annotation(tag_levels = "a")
+
+## Save
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/outputs")
+
+ggsave("Figure_GLM_maps_composite.png",
+       plot   = combined,
+       width  = 15,
+       height = 5,
+       dpi    = 300)
+
+## PDF
+ggsave("Figure_GLM_maps_composite.pdf",
+       plot   = combined,
+       width  = 15,
+       height = 5)
 
 
 
