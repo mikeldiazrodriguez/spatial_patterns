@@ -8,10 +8,10 @@ ipak <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
 # usage
-packages <- c("sf", "mapview", "spatstat.geom", "GGally", "writexl",
+packages <- c("sf","sp", "mapview", "spatstat.geom", "spatstat.convert", "GGally", "writexl",
               "dplyr", "broom", "purrr", "terra", "tidyterra", "ggplot2",
               "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2", 
-              "pROC", "patchwork", "cowplot", "ggspatial")
+              "pROC", "patchwork", "cowplot", "ggspatial", "virtualspecies", "onpoint")
 ipak(packages)
 
 # set your working directory
@@ -1622,3 +1622,419 @@ for (g in names(groups)) {
 }
 
 cat("\n=== Composite figures saved in:\n", getwd(), "\n")
+
+
+
+
+# Refinement Monforte
+
+# set the working directory
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+
+# Load vector data
+gg <- st_read("sites_monforte.shp", quiet = TRUE)
+
+p <- st_read("area_monforte.shp", quiet = TRUE)
+
+wind <- as.owin(p)
+
+gp <- unmark(as.ppp(gg))
+
+gpw <- gp[wind]
+
+# Load and prepare raster data
+
+# set de wd
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
+
+dem <- raster("ALTA_monforte.tif")
+slo <- raster("SLO_monforte.tif")
+vis <- raster("VISPR_monforte.tif")
+
+slo <- resample(slo, dem)
+vis <- resample(vis, dem)
+
+rs <- stack(dem, slo, vis)  
+
+removeCollinearity(rs, multicollinearity.cutoff = 0.75,
+                   select.variables = FALSE, sample.points = TRUE, nb.points = 100000,
+                   plot = TRUE) # No collinear variables
+
+gvars <- list(as.im(as(dem, "SpatialGridDataFrame")),
+              as.im(as(slo, "SpatialGridDataFrame")),
+              as.im(as(vis, "SpatialGridDataFrame")))
+
+names(gvars) <- c("dem", "slo", "vis")
+
+rm(dem)
+rm(slo)
+rm(vis)
+rm(rs)
+
+# Extract data frame
+
+marea <- as.ppp(gg)
+datproj <- as.data.frame(marea)
+
+## Analysis: Model fitting
+
+# First order
+
+gtrend <- ~ dem + slo + vis # Define spatial trend
+
+fitgg <- step(ppm(gpw, trend = gtrend, covariates=gvars, correction = "iso", method="logi"), k=log(5))
+
+summary(fitgg)
+
+# First and second order
+
+gatrend <- ~ dem + slo + vis
+
+ir <- data.frame(r=seq(100, 2500, by=100))
+
+fitgg2 <- profilepl(ir, f=AreaInter, gpw, aic=TRUE, fast=TRUE, covariates=gvars, trend=gatrend, verbose=TRUE)
+
+# profilepl() is used over ppm() due to the lack of parallelisation of this function
+# and hence the extreme length of time it takes to fit and output. Results are equivalent.
+
+pt <- as.ppm(fitgg2)
+
+## Analysis: Model testing
+
+# Based on 999 simulations of CSR - this may take a while to run.
+
+# Null
+
+null <- envelope(gpw, fun = pcfinhom, nsim = 999, correction = "iso", divisor="d")
+
+# First order 
+
+gsimfit <- envelope(fitgg, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d")
+
+# First and second order
+
+gsimfit2 <- envelope(pt, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d", method="logi")
+
+
+# create heterogenous pattern
+null_model_hetero <- rheteroppp(gpw, nsim = 999)
+
+hetero <- envelope(gpw, fun = pcf, 
+                   funargs = list(correction = "Ripley", divisor = "d"),
+                   simulate = null_model_hetero, nsim = 999, 
+                   verbose = FALSE)
+
+
+# Create Figure ginhom function
+p1 <- plot_quantums(hetero, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="a. Simulated heterogeneous pattern model") 
+
+p2 <- plot_quantums(null, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="b. Null model") 
+
+p3 <- plot_quantums(gsimfit, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="c. First-order effects model") 
+
+p4 <- plot_quantums(gsimfit2, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="d. First and second-order effects model") 
+
+(p1| p2) /
+  (p3| p4) 
+
+
+
+
+
+# Refinement Northern
+
+# set the working directory
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+
+# Load vector data
+gg <- st_read("sites_northern.shp", quiet = TRUE)
+
+p <- st_read("area_northern.shp", quiet = TRUE)
+
+wind <- as.owin(p)
+
+gp <- unmark(as.ppp(gg))
+
+gpw <- gp[wind]
+
+# Load and prepare raster data
+
+# set de wd
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
+
+dem <- raster("ALTA_northern.tif")
+tpi <- raster("TPI100_northern.asc")
+geo <- raster("GEOLC_northern.tif")
+
+tpi <- resample(tpi, dem)
+geo <- resample(geo, dem)
+
+rs <- stack(dem, tpi, geo)  
+
+removeCollinearity(rs, multicollinearity.cutoff = 0.75,
+                   select.variables = FALSE, sample.points = TRUE, nb.points = 100000,
+                   plot = TRUE) # No collinear variables
+
+gvars <- list(as.im(as(dem, "SpatialGridDataFrame")),
+              as.im(as(tpi, "SpatialGridDataFrame")),
+              as.im(as(geo, "SpatialGridDataFrame")))
+
+names(gvars) <- c("dem", "tpi", "geo")
+
+rm(dem)
+rm(tpi)
+rm(geo)
+rm(rs)
+
+# Extract data frame
+
+marea <- as.ppp(gg)
+datproj <- as.data.frame(marea)
+
+## Analysis: Model fitting
+
+# First order
+
+gtrend <- ~ dem + tpi + geo # Define spatial trend
+
+fitgg <- step(ppm(gpw, trend = gtrend, covariates=gvars, correction = "iso", method="logi"), k=log(5))
+
+summary(fitgg)
+
+# First and second order
+
+gatrend <- ~ dem + tpi + geo
+
+ir <- data.frame(r=seq(100, 2500, by=100))
+
+fitgg2 <- profilepl(ir, f=AreaInter, gpw, aic=TRUE, fast=TRUE, covariates=gvars, trend=gatrend, verbose=TRUE)
+
+# profilepl() is used over ppm() due to the lack of parallelisation of this function
+# and hence the extreme length of time it takes to fit and output. Results are equivalent.
+
+pt <- as.ppm(fitgg2)
+
+## Analysis: Model testing
+
+# Based on 999 simulations of CSR - this may take a while to run.
+
+# Null
+
+null <- envelope(gpw, fun = pcfinhom, nsim = 999, correction = "iso", divisor="d")
+
+# First order 
+
+gsimfit <- envelope(fitgg, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d")
+
+# First and second order
+
+gsimfit2 <- envelope(pt, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d", method="logi")
+
+
+# create heterogenous pattern
+null_model_hetero <- rheteroppp(gpw, nsim = 999)
+
+hetero <- envelope(gpw, fun = pcf, 
+                   funargs = list(correction = "Ripley", divisor = "d"),
+                   simulate = null_model_hetero, nsim = 999, 
+                   verbose = FALSE)
+
+
+# Create Figure ginhom function
+p1 <- plot_quantums(hetero, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="a. Simulated heterogeneous pattern model") 
+
+p2 <- plot_quantums(null, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="b. Null model") 
+
+p3 <- plot_quantums(gsimfit, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="c. First-order effects model") 
+
+p4 <- plot_quantums(gsimfit2, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="d. First and second-order effects model") 
+
+(p1| p2) /
+  (p3| p4) 
+
+
+
+
+
+# Refinement Central
+
+# set the working directory
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/shp")
+
+# Load vector data
+gg <- st_read("sites_central.shp", quiet = TRUE)
+
+p <- st_read("area_central.shp", quiet = TRUE)
+
+wind <- as.owin(p)
+
+gp <- unmark(as.ppp(gg))
+
+gpw <- gp[wind]
+
+# Load and prepare raster data
+
+# set de wd
+setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
+
+dem <- raster("ALTA_central.tif")
+tpi <- raster("TPI1000_central.asc")
+geo <- raster("GEOLC_central.tif")
+
+tpi <- resample(tpi, dem)
+geo <- resample(geo, dem)
+
+rs <- stack(dem, tpi, geo)  
+
+removeCollinearity(rs, multicollinearity.cutoff = 0.75,
+                   select.variables = FALSE, sample.points = TRUE, nb.points = 100000,
+                   plot = TRUE) # No collinear variables
+
+gvars <- list(as.im(as(dem, "SpatialGridDataFrame")),
+              as.im(as(tpi, "SpatialGridDataFrame")),
+              as.im(as(geo, "SpatialGridDataFrame")))
+
+names(gvars) <- c("dem", "tpi", "geo")
+
+rm(dem)
+rm(tpi)
+rm(geo)
+rm(rs)
+
+# Extract data frame
+
+marea <- as.ppp(gg)
+datproj <- as.data.frame(marea)
+
+## Analysis: Model fitting
+
+# First order
+
+gtrend <- ~ dem + tpi + geo # Define spatial trend
+
+fitgg <- step(ppm(gpw, trend = gtrend, covariates=gvars, correction = "iso", method="logi"), k=log(5))
+
+summary(fitgg)
+
+# First and second order
+
+gatrend <- ~ dem + tpi + geo
+
+ir <- data.frame(r=seq(100, 2500, by=100))
+
+fitgg2 <- profilepl(ir, f=AreaInter, gpw, aic=TRUE, fast=TRUE, covariates=gvars, trend=gatrend, verbose=TRUE)
+
+# profilepl() is used over ppm() due to the lack of parallelisation of this function
+# and hence the extreme length of time it takes to fit and output. Results are equivalent.
+
+pt <- as.ppm(fitgg2)
+
+## Analysis: Model testing
+
+# Based on 999 simulations of CSR - this may take a while to run.
+
+# Null
+
+null <- envelope(gpw, fun = pcfinhom, nsim = 999, correction = "iso", divisor="d")
+
+# First order 
+
+gsimfit <- envelope(fitgg, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d")
+
+# First and second order
+
+gsimfit2 <- envelope(pt, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d", method="logi")
+
+
+# create heterogenous pattern
+null_model_hetero <- rheteroppp(gpw, nsim = 999)
+
+hetero <- envelope(gpw, fun = pcf, 
+                   funargs = list(correction = "Ripley", divisor = "d"),
+                   simulate = null_model_hetero, nsim = 999, 
+                   verbose = FALSE)
+
+
+# Create Figure ginhom function
+p1 <- plot_quantums(hetero, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="a. Simulated heterogeneous pattern model") 
+
+p2 <- plot_quantums(null, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="b. Null model") 
+
+p3 <- plot_quantums(gsimfit, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="c. First-order effects model") 
+
+p4 <- plot_quantums(gsimfit2, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="d. First and second-order effects model") 
+
+(p1| p2) /
+  (p3| p4) 
