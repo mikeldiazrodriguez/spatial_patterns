@@ -8,10 +8,11 @@ ipak <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
 # usage
-packages <- c("sf","sp", "mapview", "spatstat.geom", "spatstat.convert", "GGally", "writexl",
-              "dplyr", "broom", "purrr", "terra", "tidyterra", "ggplot2",
-              "foreach", "tibble", "magrittr", "tidyr", "MASS", "brglm2", 
-              "pROC", "patchwork", "cowplot", "ggspatial", "virtualspecies", "onpoint")
+packages <- c("sf", "sp", "raster", "terra", "spatstat", "spatstat.geom", 
+              "spatstat.convert", "GGally", "writexl", "dplyr", "broom", 
+              "tidyterra", "ggplot2", "foreach", "tibble", "magrittr", 
+              "brglm2", "pROC", "patchwork", "cowplot", "ggspatial", 
+              "virtualspecies", "onpoint")
 ipak(packages)
 
 # set your working directory
