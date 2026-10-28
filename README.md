@@ -133,4 +133,4 @@ Wilke, C. O. (2024). cowplot: Streamlined Plot Theme and Plot Annotations for �
 ## Source code and data reference
 Mikel Díaz-Rodríguez<a href="https://orcid.org/0000-0002-2703-1507">
 <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="14" height="14" />
-</a>. (2026, October 28). Living in the Mountains. Settlement patterns in Northwestern Iberia during the Palaeolithic period. Source code and data. Zenodo. https://zenodo.org/doi/10.5281/zenodo.10142401
+</a>. (2026, October 28). Less is More? Testing the Impact of Environmental Variable Refinement on Palaeolithic Site Location Models. Source code and data. Zenodo. https://zenodo.org/doi/10.5281/zenodo.10142401
