@@ -134,3 +134,11 @@ Wilke, C. O. (2024). cowplot: Streamlined Plot Theme and Plot Annotations for �
 Mikel Díaz-Rodríguez<a href="https://orcid.org/0000-0002-2703-1507">
 <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="14" height="14" />
 </a> (2026, October 28). Less is More? Testing the Impact of Environmental Variable Refinement on Palaeolithic Site Location Models. Source code and data. Zenodo. https://zenodo.org/doi/10.5281/zenodo.10142401
+
+
+[![DOI](https://zenodo.org/badge/610742714.svg)](https://zenodo.org/doi/10.5281/zenodo.10142401)
+
+[Link in Zenodo](https://doi.org/10.5281/zenodo.10142401) 
+
+## License
+CC-BY 4.0
