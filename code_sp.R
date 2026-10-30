@@ -1,3 +1,39 @@
+# Title: Less is More? Testing the Impact of Environmental Variable Refinement on Palaeolithic Site Location Models
+# Author: Mikel Diaz-Rodriguez
+# Date: November 16th, 2026
+
+#
+# Introduction
+# 
+# This document contains code to enable reproducibility of the paper 
+# "Less is More? Testing the Impact of Environmental Variable Refinement 
+# on Palaeolithic Site Location Models".
+#
+# For this, it is necessary to execute the steps shown in the following lines.
+#
+# Code Attribution
+#
+# The R code presented in this document was developed and adapted by the
+# author (Mikel Díaz-Rodríguez) from several sources. Portions of the code
+# are adapted from:
+#
+# - Marwick, B. (2018). How To Do Archaeological Science Using R.
+#   Available at: https://benmarwick.github.io/How-To-Do-Archaeological-Science-Using-R/
+#
+# - Riris, P. (2020). Spatial structure among the geometric earthworks of
+#   western Amazonia (Acre, Brazil). Journal of Anthropological Archaeology,
+#   59, 101177. https://doi.org/10.1016/j.jaa.2020.101177
+#   (For the Monte Carlo and Kernel Density Estimation approaches).
+#
+# - Carrero-Pazos, M., Bevan, A., & Lake, M. W. (2019). The spatial structure
+#   of Galician megalithic landscapes (NW Iberia): A case study from the
+#   Monte Penide region. Journal of Archaeological Science, 108.
+#   https://doi.org/10.1016/J.JAS.2019.05.004
+#   (For the spatial analysis workflow).
+#
+# Any errors or adaptations are the sole responsibility of the author.
+
+
 # install and load multiple R packages.
 # check to see if packages are installed. Install them if they are not, then load them into the R session.
 
