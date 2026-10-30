@@ -1,0 +1,2126 @@
+---
+title: Less is More? Testing the Impact of Environmental Variable Refinement on Palaeolithic Site Location Models.
+author: "Mikel Diaz-Rodriguez"
+date: "November 16th, 2023"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Introduction
+
+This document contains code to enable reproducibility of the paper "Less is More? Testing the Impact of Environmental Variable Refinement on Palaeolithic Site Location Models".
+
+For this, it is necessary to execute the steps shown in the following lines.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  eval = TRUE,          
+  echo = TRUE,           
+  message = FALSE,       
+  warning = FALSE,       
+  results = 'hide',      
+  fig.show = 'hide'      
+)
+```
+
+# Necessary packages
+
+Import the packages to execute the following analysis.
+
+```{r}
+# ipak function: install and load multiple R packages.
+# check to see if packages are installed. Install them if they are not, then load them into the R session.
+
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+# usage
+packages <- c("sf", "sp", "raster", "terra", "spatstat", "spatstat.geom", 
+              "spatstat.convert", "GGally", "writexl", "dplyr", "broom", 
+              "tidyterra", "ggplot2", "foreach", "tibble", "magrittr", 
+              "brglm2", "pROC", "patchwork", "cowplot", "ggspatial", 
+              "virtualspecies", "onpoint")
+ipak(packages)
+```
+
+
+# Import data
+
+Import the data used.
+
+```{r}
+# set your working directory
+setwd("~/spatial_patterns/shp")
+
+# add the study areas
+area_monforte  <- st_read("area_monforte.shp")
+area_northern  <- st_read("area_northern.shp")
+area_central   <- st_read("area_central.shp")
+
+# add the sites
+sitesSubM <- st_read("sites_monforte.shp")
+sitesSubN <- st_read("sites_northern.shp")
+sitesSubC  <- st_read("sites_central.shp")
+
+# add the random sites
+random_sites_monforte <- st_read("random_sites_monforte.shp")
+random_sites_northern <- st_read("random_sites_northern.shp")
+random_sites_central  <- st_read("random_sites_central.shp")
+
+# set a window for each area
+window_monforte <- as.owin(area_monforte)
+window_north    <- as.owin(area_northern)
+window_central  <- as.owin(area_central)
+
+# create a ppp object
+sitesSubM.ppp <- ppp(x = sitesSubM$UTMX, y = sitesSubM$UTMY, window = window_monforte)
+sitesSubN.ppp <- ppp(x = sitesSubN$utmx, y = sitesSubN$utmy, window = window_north)
+sitesSubC.ppp <- ppp(x = sitesSubC$utmx, y = sitesSubC$utmy, window = window_central)
+
+# CSR Analysis
+## Monforte de Lemos basin
+### Normality test for sites
+shapiro.test(sitesSubM$UTMX)
+
+### Normality test for random sites
+shapiro.test(random_sites_monforte$UTMX)
+
+### If the alternative hypothesis is accepted, the points do not follow a normal distribution. To verify this, the K-S Test is used.
+### K-S is a non-parametric test to check if the points of both samples belong to the same population.
+ks.test(sitesSubM$UTMX,random_sites_monforte$UTMX)
+
+
+## Northern Mountain ranges
+### Normality test for sites
+shapiro.test(sitesSubN$utmx)
+
+### Normality test for random sites
+shapiro.test(random_sites_northern$utmx)
+
+### If the alternative hypothesis is accepted, the points do not follow a normal distribution. To verify this, the K-S Test is used.
+### K-S is a non-parametric test to check if the points of both samples belong to the same population.
+ks.test(sitesSubN$utmx,random_sites_northern$utmx)
+
+
+## Central Mountain ranges
+### Normality test for sites
+shapiro.test(sitesSubC$utmx)
+
+### Normality test for random sites
+shapiro.test(random_sites_central$utmx)
+
+### K-S Test
+ks.test(sitesSubC$utmx,random_sites_central$utmx)
+```
+
+# Person’s Correlation function
+
+Calculated to identify and exclude highly collinear environmental variables.
+
+```{r}
+# Person’s Correlation function
+## change your working directory
+setwd("~/spatial_patterns/csv")
+
+# import data
+dat_monf  <- read.table("dat_monf.csv", header = TRUE, sep = ";", dec = ".", stringsAsFactors = FALSE)
+dat_north <- read.table("dat_north.csv", header = TRUE, sep = ";", dec = ".", stringsAsFactors = FALSE)
+dat_cent  <- read.table("dat_cent.csv", header = TRUE, sep = ";", dec = ".", stringsAsFactors = FALSE)
+
+vars <- c("altitude", "wetland_cost", "goat_cost", "geology_cost", 
+          "hydrology_cost", "lcp_cost", "eucl_dist_geo", "eucl_dist_hydro",
+          "dif_ins", "dir_ins", "tot_ins", "aspect", "slope", 
+          "vis_prom", "tpi100", "tpi500", "tpi1000", "wind")
+
+
+# Data
+sample_monf  <- dat_monf[, vars]
+sample_north <- dat_north[, vars]
+sample_cent  <- dat_cent[, vars]
+
+# Check correlations
+cor(sample_monf)
+cor(sample_north)
+cor(sample_cent)
+
+# Export to csv
+cor_monf <- cor(sample_monf)
+write.csv2(cor_monf, file = "cor_monforte.csv", row.names = TRUE)
+
+cor_north <- cor(sample_north)
+write.csv2(cor_north, file = "cor_north.csv", row.names = TRUE)
+
+cor_cent <- cor(sample_cent)
+write.csv2(cor_cent, file = "cor_cent.csv", row.names = TRUE)
+
+# Check correlations as scatterplots, distributions and correlation coefficient.
+ggpairs(sample_monf)
+ggpairs(sample_north)
+ggpairs(sample_cent)
+
+# Visualization
+ggcorr(sample_monf, method=c("everything", "pearson"))
+ggcorr(sample_north, method=c("everything", "pearson"))
+ggcorr(sample_cent, method=c("everything", "pearson"))
+
+```
+
+# Resampling analysis
+
+A Monte Carlo resampling procedure (N = 999) was performed to compare the empirical distribution of archaeological sites against the background landscape using Kernel Density Estimation and Mann-Whitney U tests.
+
+```{r}
+# Northern area
+
+## set your working directory
+setwd("~/spatial_patterns/shp")
+
+## add the sites
+sitesSubN <- sf::st_read("sites_northern.shp")
+
+# add the study area
+area_northern  <- sf::st_read("area_northern.shp")
+
+# set a window for each area
+window_north <- spatstat.geom::as.owin(sf::st_geometry(area_northern))
+
+# create a ppp object
+coords_points  <- sf::st_coordinates(sitesSubN)
+sitesSubN.ppp  <- ppp(x = sitesSubN$utmx, y = sitesSubN$utmy, window = window_north)
+
+## set the working directory
+setwd("~/spatial_patterns/grids")
+
+## Import variables and set the same extent for everyone
+
+ALTA_northern <- terra::rast("ALTA_northern.tif")
+
+TPI100_northern <- raster("TPI100_northern.asc")
+
+TPI500_northern <- raster("TPI500_northern.asc")
+
+TPI1000_northern <- raster("TPI1000_northern.asc")
+
+SLO_northern <- raster("SLO_northern.tif") 
+
+ASP_northern <- raster("ASP_northern.tif") 
+
+HYDROE_northern <- raster("HYDROE_northern.tif")
+
+HYDROC_northern <- raster("HYDROC_northern.tif") 
+
+WET_northern <- raster("WET_northern.tif") 
+
+GEOLE_northern <- raster("GEOLE_northern.tif")
+
+GEOLC_northern <- raster("GEOLC_northern.tif")
+
+VISPR_northern <- raster("VISPR_northern.tif")
+
+LCPC_northern <- raster("LCPC_northern.tif")
+
+TOTINS_northern <- raster("TOTINS_northern.asc") 
+
+DIRINS_northern <- raster("DIRINS_northern.asc") 
+
+DIFINS_northern <- raster("DIFINS_northern.asc")  
+
+WIND_northern <- raster("WIND_northern.asc") 
+
+CPFPCGc_northern <- raster("CPFPCGc_northern.tif")
+
+CPFPCDc_northern <- raster("CPFPCDc_northern.tif")
+
+
+# Mann–Whitney U test - Northern area
+
+## add rasters
+setwd("~/spatial_patterns/grids")
+
+## Import variables and set the same extent for everyone
+ALTA_northern    <- rast("ALTA_northern.tif")
+TPI100_northern  <- rast("TPI100_northern.asc")
+TPI500_northern  <- rast("TPI500_northern.asc")
+TPI1000_northern <- rast("TPI1000_northern.asc")
+SLO_northern     <- rast("SLO_northern.tif")
+ASP_northern     <- rast("ASP_northern.tif")
+HYDROE_northern  <- rast("HYDROE_northern.tif")
+HYDROC_northern  <- rast("HYDROC_northern.tif")
+WET_northern     <- rast("WET_northern.tif")
+GEOLE_northern   <- rast("GEOLE_northern.tif")
+GEOLC_northern   <- rast("GEOLC_northern.tif")
+VISPR_northern   <- rast("VISPR_northern.tif")
+LCPC_northern    <- rast("LCPC_northern.tif")
+TOTINS_northern  <- rast("TOTINS_northern.asc")
+DIRINS_northern  <- rast("DIRINS_northern.asc")
+DIFINS_northern  <- rast("DIFINS_northern.asc")
+WIND_northern    <- rast("WIND_northern.asc")
+CPFPCGc_northern <- rast("CPFPCGc_northern.tif")
+CPFPCDc_northern <- rast("CPFPCDc_northern.tif")
+
+## Raster list
+rasters_north <- list(
+  ALTA      = terra::rast("ALTA_northern.tif"),
+  TPI100    = terra::rast("TPI100_northern.asc"),
+  TPI500    = terra::rast("TPI500_northern.asc"),
+  TPI1000   = terra::rast("TPI1000_northern.asc"),
+  SLO       = terra::rast("SLO_northern.tif"),
+  ASP       = terra::rast("ASP_northern.tif"),
+  HYDROE    = terra::rast("HYDROE_northern.tif"),
+  HYDROC    = terra::rast("HYDROC_northern.tif"),
+  WET       = terra::rast("WET_northern.tif"),
+  GEOLE     = terra::rast("GEOLE_northern.tif"),
+  GEOLC     = terra::rast("GEOLC_northern.tif"),
+  VISPR     = terra::rast("VISPR_northern.tif"),
+  LCPC      = terra::rast("LCPC_northern.tif"),
+  TOTINS    = terra::rast("TOTINS_northern.asc"),
+  DIRINS    = terra::rast("DIRINS_northern.asc"),
+  DIFINS    = terra::rast("DIFINS_northern.asc"),
+  WIND      = terra::rast("WIND_northern.asc"),
+  CPFPCGc   = terra::rast("CPFPCGc_northern.tif"),
+  CPFPCDc   = terra::rast("CPFPCDc_northern.tif")
+)
+  
+# Exact names of the objects in the environment
+variables_north <- c("ALTA_northern", "TPI100_northern", "TPI500_northern", "TPI1000_northern",
+                     "SLO_northern", "ASP_northern", "HYDROE_northern", "HYDROC_northern",
+                     "WET_northern", "GEOLE_northern", "GEOLC_northern", "VISPR_northern",
+                     "LCPC_northern", "TOTINS_northern", "DIRINS_northern", "DIFINS_northern",
+                     "WIND_northern", "CPFPCGc_northern", "CPFPCDc_northern")
+
+# Create the list with those objects
+rasters_north <- mget(variables_north)
+
+# Rename so that the output table is clean (without "_northern")
+names(rasters_north) <- gsub("_northern$", "", variables_north)
+
+
+# set your working directory
+setwd("~/spatial_patterns/shp")
+
+# add the study area and sites
+area_north_vect  <- terra::vect("area_northern.shp")
+sites_north_vect <- terra::vect("sites_northern.shp")
+
+area_north_vect  <- terra::project(area_north_vect,  "EPSG:25829")
+sites_north_vect <- terra::project(sites_north_vect, "EPSG:25829")
+
+
+## Function
+
+run_mwu <- function(r, sites_vect, area_vect, n_iter = 999) {
+  
+
+# Force areas and sites to have the exact CRS of the raster
+crs_r        <- terra::crs(r)
+area_vect    <- terra::project(area_vect,  crs_r)
+sites_vect   <- terra::project(sites_vect, crs_r)
+  
+# Clip and mask the raster to the study area
+r_mask <- terra::mask(terra::crop(r, area_vect), area_vect)
+  
+# Background values within the area
+background_values <- terra::values(r_mask, mat = FALSE, na.rm = TRUE)
+  
+# Raster values at the sites
+site_values <- terra::extract(r, sites_vect, ID = FALSE, na.rm = TRUE)[, 1]
+site_values <- site_values[!is.na(site_values)]
+  
+n_sites <- length(site_values)
+  
+# n_iter tests Mann-Whitney U
+mwu_results <- foreach(n = 1:n_iter, .combine = rbind) %do% {
+  background_sample <- sample(background_values, n_sites, replace = FALSE)
+    
+  wilcox.test(x = site_values,
+              y = background_sample,
+              alternative = "greater",
+              exact = FALSE) %>%
+    broom::tidy() %>%
+    tibble::as_tibble()
+} %>%
+  dplyr::select(statistic, p.value)
+  
+# Median and IC 95%
+summary_res <- foreach::foreach(prob = c(0.025, 0.5, 0.975), .combine = rbind) %do% {
+  mwu_results %>%
+    dplyr::summarise_all(quantile, probs = prob)
+} %>%
+  t() %>%
+  magrittr::set_colnames(c("Lower CI", "Median", "Upper CI")) %>%
+  magrittr::set_rownames(c("U statistic", "p-value"))
+  
+  return(summary_res)
+}
+
+analyse_area <- function(rasters_area, sites_vect, area_vect, area_name, output_file, n_iter = 999) {
+  message("Processing area: ", area_name, " ...")
+  results_list <- lapply(names(rasters_area), function(variable) {
+    res <- run_mwu(
+      r          = rasters_area[[variable]],
+      sites_vect = sites_vect,
+      area_vect  = area_vect,
+      n_iter     = n_iter
+    )
+    res_df <- as.data.frame(res)
+    res_df$Variable  <- variable
+    res_df$Statistic <- rownames(res_df)
+    res_df
+  })
+  results_table <- do.call(rbind, results_list)
+  results_table <- results_table %>%
+    dplyr::select(Variable, Statistic, `Lower CI`, Median, `Upper CI`) %>%
+    dplyr::mutate(across(where(is.numeric), ~ round(.x, 4)))
+  dir.create(dirname(output_file), showWarnings = FALSE, recursive = TRUE)
+  writexl::write_xlsx(results_table, path = output_file)
+  message("  -> Saved: ", output_file)
+  return(results_table)
+}
+
+set.seed(123)   
+
+results_northern <- analyse_area(
+  rasters_area = rasters_north,        # 19 rasters list
+  sites_vect   = sites_north_vect,     # sites SpatVector 
+  area_vect    = area_north_vect,      # area SpatVector 
+  area_name    = "Northern",
+  output_file  = "~/outputs/MWU_Northern.xlsx",
+  n_iter       = 999
+)
+
+print(results_northern)
+
+
+
+# Mann–Whitney U test - Central area
+
+## add rasters
+setwd("~/spatial_patterns/grids")
+
+## Import variables and set the same extent for everyone
+ALTA_central    <- rast("ALTA_central.tif")
+TPI100_central  <- rast("TPI100_central.asc")
+TPI500_central  <- rast("TPI500_central.asc")
+TPI1000_central <- rast("TPI1000_central.asc")
+SLO_central     <- rast("SLO_central.tif")
+ASP_central     <- rast("ASP_central.tif")
+HYDROE_central  <- rast("HYDROE_central.tif")
+HYDROC_central  <- rast("HYDROC_central.tif")
+WET_central     <- rast("WET_central.tif")
+GEOLE_central   <- rast("GEOLE_central.tif")
+GEOLC_central   <- rast("GEOLC_central.tif")
+VISPR_central   <- rast("VISPR_central.tif")
+LCPC_central    <- rast("LCPC_central.tif")
+TOTINS_central  <- rast("TOTINS_central.asc")
+DIRINS_central  <- rast("DIRINS_central.asc")
+DIFINS_central  <- rast("DIFINS_central.asc")
+WIND_central    <- rast("WIND_central.asc")
+CPFPCGc_central <- rast("CPFPCGc_central.tif")
+CPFPCDc_central <- rast("CPFPCDc_central.tif")
+
+## Raster list
+rasters_north <- list(
+  ALTA      = terra::rast("ALTA_central.tif"),
+  TPI100    = terra::rast("TPI100_central.asc"),
+  TPI500    = terra::rast("TPI500_central.asc"),
+  TPI1000   = terra::rast("TPI1000_central.asc"),
+  SLO       = terra::rast("SLO_central.tif"),
+  ASP       = terra::rast("ASP_central.tif"),
+  HYDROE    = terra::rast("HYDROE_central.tif"),
+  HYDROC    = terra::rast("HYDROC_central.tif"),
+  WET       = terra::rast("WET_central.tif"),
+  GEOLE     = terra::rast("GEOLE_central.tif"),
+  GEOLC     = terra::rast("GEOLC_central.tif"),
+  VISPR     = terra::rast("VISPR_central.tif"),
+  LCPC      = terra::rast("LCPC_central.tif"),
+  TOTINS    = terra::rast("TOTINS_central.asc"),
+  DIRINS    = terra::rast("DIRINS_central.asc"),
+  DIFINS    = terra::rast("DIFINS_central.asc"),
+  WIND      = terra::rast("WIND_central.asc"),
+  CPFPCGc   = terra::rast("CPFPCGc_central.tif"),
+  CPFPCDc   = terra::rast("CPFPCDc_central.tif")
+)
+
+# Exact names of the objects in the environment
+variables_central <- c("ALTA_central", "TPI100_central", "TPI500_central", "TPI1000_central",
+                     "SLO_central", "ASP_central", "HYDROE_central", "HYDROC_central",
+                     "WET_central", "GEOLE_central", "GEOLC_central", "VISPR_central",
+                     "LCPC_central", "TOTINS_central", "DIRINS_central", "DIFINS_central",
+                     "WIND_central", "CPFPCGc_central", "CPFPCDc_central")
+
+# Create the list with those objects
+rasters_central <- mget(variables_central)
+
+# Rename so that the output table is clean (without "_central")
+names(rasters_central) <- gsub("_central$", "", variables_central)
+
+
+# set your working directory
+setwd("~/spatial_patterns/shp")
+
+# add the study area and sites
+area_central_vect  <- terra::vect("area_central.shp")
+sites_central_vect <- terra::vect("sites_central.shp")
+
+area_central_vect  <- terra::project(area_central_vect,  "EPSG:25829")
+sites_central_vect <- terra::project(sites_central_vect, "EPSG:25829")
+
+
+## Function
+
+run_mwu <- function(r, sites_vect, area_vect, n_iter = 999) {
+  
+  
+  # Force areas and sites to have the exact CRS of the raster
+  crs_r        <- terra::crs(r)
+  area_vect    <- terra::project(area_vect,  crs_r)
+  sites_vect   <- terra::project(sites_vect, crs_r)
+  
+  # Clip and mask the raster to the study area
+  r_mask <- terra::mask(terra::crop(r, area_vect), area_vect)
+  
+  # Background values within the area
+  background_values <- terra::values(r_mask, mat = FALSE, na.rm = TRUE)
+  
+  # Raster values at the sites
+  site_values <- terra::extract(r, sites_vect, ID = FALSE, na.rm = TRUE)[, 1]
+  site_values <- site_values[!is.na(site_values)]
+  
+  n_sites <- length(site_values)
+  
+  # n_iter tests Mann-Whitney U
+  mwu_results <- foreach(n = 1:n_iter, .combine = rbind) %do% {
+    background_sample <- sample(background_values, n_sites, replace = FALSE)
+    
+    wilcox.test(x = site_values,
+                y = background_sample,
+                alternative = "greater",
+                exact = FALSE) %>%
+      broom::tidy() %>%
+      tibble::as_tibble()
+  } %>%
+    dplyr::select(statistic, p.value)
+  
+  # Median and IC 95%
+  summary_res <- foreach::foreach(prob = c(0.025, 0.5, 0.975), .combine = rbind) %do% {
+    mwu_results %>%
+      dplyr::summarise_all(quantile, probs = prob)
+  } %>%
+    t() %>%
+    magrittr::set_colnames(c("Lower CI", "Median", "Upper CI")) %>%
+    magrittr::set_rownames(c("U statistic", "p-value"))
+  
+  return(summary_res)
+}
+
+set.seed(123)   
+
+results_central <- analyse_area(
+  rasters_area = rasters_central,        # 19 rasters list
+  sites_vect   = sites_central_vect,     # sites SpatVector 
+  area_vect    = area_central_vect,      # area SpatVector 
+  area_name    = "central",
+  output_file  = "~/outputs/MWU_Central.xlsx",
+  n_iter       = 999
+)
+
+print(results_central)
+
+
+
+
+# Mann–Whitney U test - Monforte area
+
+## add rasters
+setwd("~/spatial_patterns/grids")
+
+## Import variables and set the same extent for everyone
+ALTA_monforte    <- rast("ALTA_monforte.tif")
+TPI100_monforte  <- rast("TPI100_monforte.asc")
+TPI500_monforte  <- rast("TPI500_monforte.asc")
+TPI1000_monforte <- rast("TPI1000_monforte.asc")
+SLO_monforte     <- rast("SLO_monforte.tif")
+ASP_monforte     <- rast("ASP_monforte.tif")
+HYDROE_monforte  <- rast("HYDROE_monforte.tif")
+HYDROC_monforte  <- rast("HYDROC_monforte.tiff")
+WET_monforte     <- rast("WET_monforte.tiff")
+GEOLE_monforte   <- rast("GEOLE_monforte.tif")
+GEOLC_monforte   <- rast("GEOLC_monforte.tiff")
+VISPR_monforte   <- rast("VISPR_monforte.tif")
+LCPC_monforte    <- rast("LCPC_monforte.tiff")
+TOTINS_monforte  <- rast("TOTINS_monforte.asc")
+DIRINS_monforte  <- rast("DIRINS_monforte.asc")
+DIFINS_monforte  <- rast("DIFINS_monforte.asc")
+WIND_monforte    <- rast("WIND_monforte.asc")
+CPFPCGc_monforte <- rast("CPFPCGc_monforte.tif")
+CPFPCDc_monforte <- rast("CPFPCDc_monforte.tif")
+
+## Raster list
+rasters_north <- list(
+  ALTA      = terra::rast("ALTA_monforte.tif"),
+  TPI100    = terra::rast("TPI100_monforte.asc"),
+  TPI500    = terra::rast("TPI500_monforte.asc"),
+  TPI1000   = terra::rast("TPI1000_monforte.asc"),
+  SLO       = terra::rast("SLO_monforte.tif"),
+  ASP       = terra::rast("ASP_monforte.tif"),
+  HYDROE    = terra::rast("HYDROE_monforte.tif"),
+  HYDROC    = terra::rast("HYDROC_monforte.tiff"),
+  WET       = terra::rast("WET_monforte.tiff"),
+  GEOLE     = terra::rast("GEOLE_monforte.tif"),
+  GEOLC     = terra::rast("GEOLC_monforte.tiff"),
+  VISPR     = terra::rast("VISPR_monforte.tif"),
+  LCPC      = terra::rast("LCPC_monforte.tiff"),
+  TOTINS    = terra::rast("TOTINS_monforte.asc"),
+  DIRINS    = terra::rast("DIRINS_monforte.asc"),
+  DIFINS    = terra::rast("DIFINS_monforte.asc"),
+  WIND      = terra::rast("WIND_monforte.asc"),
+  CPFPCGc   = terra::rast("CPFPCGc_monforte.tif"),
+  CPFPCDc   = terra::rast("CPFPCDc_monforte.tif")
+)
+
+# Exact names of the objects in the environment
+variables_monforte <- c("ALTA_monforte", "TPI100_monforte", "TPI500_monforte", "TPI1000_monforte",
+                       "SLO_monforte", "ASP_monforte", "HYDROE_monforte", "HYDROC_monforte",
+                       "WET_monforte", "GEOLE_monforte", "GEOLC_monforte", "VISPR_monforte",
+                       "LCPC_monforte", "TOTINS_monforte", "DIRINS_monforte", "DIFINS_monforte",
+                       "WIND_monforte", "CPFPCGc_monforte", "CPFPCDc_monforte")
+
+# Create the list with those objects
+rasters_monforte <- mget(variables_monforte)
+
+# Rename so that the output table is clean (without "_central")
+names(rasters_monforte) <- gsub("_monforte$", "", variables_monforte)
+
+
+# set your working directory
+setwd("~/spatial_patterns/shp")
+
+# add the study area and sites
+area_monforte_vect  <- terra::vect("area_monforte.shp")
+sites_monforte_vect <- terra::vect("sites_monforte.shp")
+
+area_monforte_vect  <- terra::project(area_monforte_vect,  "EPSG:25829")
+sites_monforte_vect <- terra::project(sites_monforte_vect, "EPSG:25829")
+
+
+## Function
+
+run_mwu <- function(r, sites_vect, area_vect, n_iter = 999) {
+  
+  
+  # Force areas and sites to have the exact CRS of the raster
+  crs_r        <- terra::crs(r)
+  area_vect    <- terra::project(area_vect,  crs_r)
+  sites_vect   <- terra::project(sites_vect, crs_r)
+  
+  # Clip and mask the raster to the study area
+  r_mask <- terra::mask(terra::crop(r, area_vect), area_vect)
+  
+  # Background values within the area
+  background_values <- terra::values(r_mask, mat = FALSE, na.rm = TRUE)
+  
+  # Raster values at the sites
+  site_values <- terra::extract(r, sites_vect, ID = FALSE, na.rm = TRUE)[, 1]
+  site_values <- site_values[!is.na(site_values)]
+  
+  n_sites <- length(site_values)
+  
+  # n_iter tests Mann-Whitney U
+  mwu_results <- foreach(n = 1:n_iter, .combine = rbind) %do% {
+    background_sample <- sample(background_values, n_sites, replace = FALSE)
+    
+    wilcox.test(x = site_values,
+                y = background_sample,
+                alternative = "greater",
+                exact = FALSE) %>%
+      broom::tidy() %>%
+      tibble::as_tibble()
+  } %>%
+    dplyr::select(statistic, p.value)
+  
+  # Median and IC 95%
+  summary_res <- foreach::foreach(prob = c(0.025, 0.5, 0.975), .combine = rbind) %do% {
+    mwu_results %>%
+      dplyr::summarise_all(quantile, probs = prob)
+  } %>%
+    t() %>%
+    magrittr::set_colnames(c("Lower CI", "Median", "Upper CI")) %>%
+    magrittr::set_rownames(c("U statistic", "p-value"))
+  
+  return(summary_res)
+}
+
+set.seed(123)   
+
+results_monforte <- analyse_area(
+  rasters_area = rasters_monforte,        # 19 rasters list
+  sites_vect   = sites_monforte_vect,     # sites SpatVector 
+  area_vect    = area_monforte_vect,      # area SpatVector 
+  area_name    = "monforte",
+  output_file  = "~/outputs/MWU_Monforte.xlsx",
+  n_iter       = 999
+)
+
+print(results_monforte)
+```
+
+
+## GLM
+
+Generalized Linear Models (GLM) with Firth's penalized likelihood were fitted to generate predictive probability surfaces, with optimal covariates selected via backward stepwise AIC
+
+
+```{r}
+# GLM Monforte
+
+# add the sites
+setwd("~/spatial_patterns/shp")
+
+locations_monf <- terra::vect("locations_monforte.shp")
+
+## raster directory
+setwd("~/spatial_patterns/grids")
+
+## add reference raster
+elevation <- terra::rast("ALTA_monforte.tif")
+
+## add rasters
+tot_inso    <- terra::project(terra::rast("TOTINS_monforte.asc"), elevation)
+aspect      <- terra::project(terra::rast("ASP_monforte.tif"),          elevation)
+slope       <- terra::project(terra::rast("SLO_monforte.tif"),           elevation)
+visual_prom <- terra::project(terra::rast("VISPR_monforte.tif"), elevation)
+tpi100      <- terra::project(terra::rast("TPI100_monforte.asc"),          elevation)
+wind        <- terra::project(terra::rast("WIND_monforte.asc"),            elevation)
+wetland_cost <- terra::project(terra::rast("WET_monforte.tiff"),  elevation)
+geol_cost    <- terra::project(terra::rast("GEOLC_monforte.tiff"),  elevation)
+hydro_cost   <- terra::project(terra::rast("HYDROC_monforte.tiff"), elevation)
+lcp_cost     <- terra::project(terra::rast("LCPC_monforte.tiff"),      elevation)
+cost_goats     <- terra::project(terra::rast("CPFPCGc_monforte.tif"),      elevation)
+
+
+## create stack
+covariates_monf <- c(elevation, tot_inso, aspect, slope, visual_prom, tpi100,
+                wetland_cost, geol_cost, hydro_cost, lcp_cost, wind)
+
+names(covariates_monf) <- c("elevation", "tot_inso", "aspect", "slope",
+                       "visual_prom", "tpi100", "wetland_cost",
+                       "geol_cost", "hydro_cost", "lcp_cost", "wind")
+
+## extract values
+locvals_monf <- as.data.frame(terra::extract(covariates_monf, locations_monf, ID = FALSE))
+
+## Response variable: 1 if the point is an archaeological site
+locvals_monf$site <- as.integer(locations_monf$CID == 1)
+
+## fit de GLM
+mod_monf <- glm(site ~ elevation + tot_inso + aspect + slope + visual_prom +
+             tpi100 + wetland_cost + geol_cost + hydro_cost + lcp_cost + wind,
+           data = locvals_monf, family = binomial(link = "logit"), method = brglm2::brglmFit)
+
+summary(mod_monf)
+
+## AIC selection
+mod2_monf <- step(mod_monf, direction = "backward")
+mod2_monf$anova
+summary(mod2_monf)
+
+## relative probability (predict type = "response")
+relprob_monf <- terra::predict(covariates_monf, mod2_monf, type = "response", na.rm = TRUE)
+
+## Visualization
+plot(relprob_monf, col = terrain.colors(8, alpha = 1), legend = TRUE,
+     axes = TRUE, main = "GLM Monforte")
+plot(locations_monf[locations_monf$CID == 1, ], pch = 19, cex = 0.3, col = "red", add = TRUE)
+
+## export surface
+setwd("~/spatial_patterns/outputs")
+
+terra::writeRaster(relprob_monf,
+                   filename = "predicsurface_monforte.asc",
+                   filetype = "AAIGrid",
+                   NAflag = -9999,
+                   overwrite = TRUE)
+
+writeLines(terra::crs(relprob_monf, proj = TRUE),
+           "predicsurface_northern.prj")
+
+
+## Model Validation
+
+## Import validation sample
+setwd("~/spatial_patterns/shp")
+val_monf <- terra::vect("control_sample_monforte.shp")
+
+## Verification
+cat("=== Monforte: validation composition ===\n")
+print(table(val_monf$CID))
+cat("Total points:", nrow(val_monf), "\n\n")
+
+## Extract predictions from the raster
+val_pred_monf <- terra::extract(relprob_monf, val_monf, ID = FALSE)[, 1]
+
+cat("NA in predictions:", sum(is.na(val_pred_monf)), "\n\n")
+
+## Calculate sensitivity, specificity, and AUC
+pred_sites  <- val_pred_monf[val_monf$CID == 1]
+pred_random <- val_pred_monf[val_monf$CID == 0]
+
+sens <- mean(pred_sites  > 0.5, na.rm = TRUE) * 100
+spec <- mean(pred_random < 0.5, na.rm = TRUE) * 100
+
+cat("N validation sites:", length(pred_sites), "\n")
+cat("N validation control:", length(pred_random), "\n")
+cat("Sensibility (> 0.5):", round(sens, 1), "%\n")
+cat("Specificity (< 0.5):", round(spec, 1), "%\n")
+
+roc_obj <- roc(
+  response  = c(rep(1, length(pred_sites)), rep(0, length(pred_random))),
+  predictor = c(pred_sites, pred_random),
+  quiet     = TRUE
+)
+cat("AUC:", round(auc(roc_obj), 3), "\n")
+
+
+# GLM Northern Area
+
+## add the sites
+setwd("~/spatial_patterns/shp")
+
+locations_north <- terra::vect("locations_northern.shp")
+
+## raster directory
+setwd("~/spatial_patterns/grids")
+
+## add reference raster
+elevation <- terra::rast("ALTA_northern.tif")
+
+## add rasters
+tot_ins         <- terra::project(terra::rast("TOTINS_northern.asc"),    elevation)
+aspect        <- terra::project(terra::rast("ASP_northern.tif"),       elevation)
+slope   <- terra::project(terra::rast("SLO_northern.tif"),       elevation)
+vispr <- terra::project(terra::rast("VISPR_northern.tif"),     elevation)
+tpi100             <- terra::project(terra::rast("TPI100_northern.asc"),    elevation)
+wind             <- terra::project(terra::rast("WIND_northern.asc"),      elevation)
+wet      <- terra::project(terra::rast("WET_northern.tif"),       elevation)
+cost_geol     <- terra::project(terra::rast("GEOLC_northern.tif"),     elevation)
+cost_hydro   <- terra::project(terra::rast("HYDROC_northern.tif"),    elevation)
+lcpc        <- terra::project(terra::rast("LCPC_northern.tif"),      elevation)
+
+
+## create stack
+covariates_north <- c(elevation, tot_ins, aspect,
+                      slope, vispr, wind,
+                      wet,
+                      cost_hydro, lcpc, tpi100, cost_geol)
+
+names(covariates_north) <- c("elevation", "tot_ins",
+                             "aspect", "slope",
+                             "vispr", "wind",
+                             "wet",
+                             "cost_hydro", "lcpc", "tpi100", "cost_geol")
+
+locvals_north <- as.data.frame(terra::extract(covariates_north, locations_north, ID = FALSE))
+locvals_north$site <- as.integer(locations_north$CID == 1)
+
+## fit de GLM
+mod_north <- glm(site ~ elevation + tot_ins + aspect +
+                   slope + vispr + wind +
+                   wet  + cost_hydro + lcpc + tpi100 +cost_geol,
+                 data = locvals_north, family = binomial(link = "logit"),method = brglm2::brglmFit,
+                 control = brglm2::brglm_control(maxit = 200, epsilon = 1e-5))
+
+summary(mod_north)
+
+## AIC selection
+mod2_north <- step(mod_north, direction = "backward") 
+mod2_north$anova
+summary(mod2_north)
+
+## relative probability (predict type = "response")
+relprob_north <- terra::predict(covariates_north, mod2_north, type = "response", na.rm = TRUE)
+
+## Visualization
+plot(relprob_north, col = terrain.colors(8, alpha = 1), legend = TRUE,
+     axes = TRUE, main = "GLM Northern")
+plot(locations_north[locations_north$CID == 1, ],
+     pch = 19, cex = 0.3, col = "red", add = TRUE)
+
+## export surface
+setwd("~/spatial_patterns/outputs")
+terra::writeRaster(relprob_north,
+                   filename = "predicsurface_northern.asc",
+                   filetype = "AAIGrid",
+                   NAflag = -9999,
+                   overwrite = TRUE)
+
+writeLines(terra::crs(relprob_north, proj = TRUE),
+           "predicsurface_northern.prj")
+
+
+## Model Validation
+
+## Import validation sample
+setwd("~/spatial_patterns/shp")
+val_north <- terra::vect("control_sample_northern.shp")
+
+## Verification
+cat("=== Northern: validation composition ===\n")
+print(table(val_north$CID))
+cat("Total points:", nrow(val_north), "\n\n")
+
+## Extract predictions from the raster
+val_pred_north <- terra::extract(relprob_north, val_north, ID = FALSE)[, 1]
+
+cat("NA in predictions:", sum(is.na(val_pred_north)), "\n\n")
+
+## Calculate sensitivity, specificity, and AUC
+pred_sites  <- val_pred_north[val_north$CID == 1]
+pred_random <- val_pred_north[val_north$CID == 0]
+
+sens <- mean(pred_sites  > 0.5, na.rm = TRUE) * 100
+spec <- mean(pred_random < 0.5, na.rm = TRUE) * 100
+
+cat("N validation sites:", length(pred_sites), "\n")
+cat("N validation control:", length(pred_random), "\n")
+cat("Sensibility (> 0.5):", round(sens, 1), "%\n")
+cat("Specificity (< 0.5):", round(spec, 1), "%\n")
+
+roc_obj <- roc(
+  response  = c(rep(1, length(pred_sites)), rep(0, length(pred_random))),
+  predictor = c(pred_sites, pred_random),
+  quiet     = TRUE
+)
+cat("AUC:", round(auc(roc_obj), 3), "\n")
+
+
+
+# GLM Central Area
+
+## add the sites
+setwd("~/spatial_patterns/shp")
+
+locations_central <- terra::vect("locations_central.shp")
+
+## raster directory
+setwd("~/spatial_patterns/grids")
+
+## add reference raster
+elevation <- terra::rast("ALTA_central.tif")
+
+## add rasters
+tot_ins         <- terra::project(terra::rast("TOTINS_central.asc"),    elevation)
+aspect        <- terra::project(terra::rast("ASP_central.tif"),       elevation)
+slope   <- terra::project(terra::rast("SLO_central.tif"),       elevation)
+vispr <- terra::project(terra::rast("VISPR_central.tif"),     elevation)
+tpi100             <- terra::project(terra::rast("TPI100_central.asc"),    elevation)
+wet      <- terra::project(terra::rast("WET_central.tif"),       elevation)
+cost_hydro   <- terra::project(terra::rast("HYDROC_central.tif"),    elevation)
+lcpc        <- terra::project(terra::rast("LCPC_central.tif"),      elevation)
+
+
+## create stack
+covariates_central <- c(elevation, tot_ins, aspect,
+                      slope, vispr,
+                      wet,
+                      cost_hydro, lcpc, tpi100)
+
+names(covariates_central) <- c("elevation", "tot_ins",
+                             "aspect", "slope",
+                             "vispr",
+                             "wet", 
+                             "cost_hydro", "lcpc", "tpi100")
+
+locvals_central <- as.data.frame(terra::extract(covariates_central, locations_central, ID = FALSE))
+locvals_central$site <- as.integer(locations_central$CID == 1)
+
+## fit de GLM
+mod_central <- glm(site ~ elevation + tot_ins + aspect +
+                   slope + vispr +
+                   wet + 
+                   cost_hydro + lcpc + tpi100 ,
+                 data = locvals_central, family = binomial(link = "logit"),method = brglm2::brglmFit)
+
+summary(mod_central)
+
+## AIC selection
+mod2_central <- step(mod_central, direction = "backward")
+mod2_central$anova
+summary(mod2_central)
+
+## relative probability (predict type = "response")
+relprob_central <- terra::predict(covariates_central, mod2_central, type = "response", na.rm = TRUE)
+
+## Visualization
+plot(relprob_central, col = terrain.colors(8, alpha = 1), legend = TRUE,
+     axes = TRUE, main = "GLM Central")
+plot(locations_central[locations_central$CID == 1, ],
+     pch = 19, cex = 0.3, col = "red", add = TRUE)
+
+## export surface
+setwd("~/spatial_patterns/outputs")
+terra::writeRaster(relprob_central,
+                   filename = "predicsurface_central.asc",
+                   filetype = "AAIGrid",
+                   NAflag = -9999,
+                   overwrite = TRUE)
+
+writeLines(terra::crs(relprob_central, proj = TRUE),
+           "predicsurface_central.prj")
+
+
+## Model Validation
+
+## Import validation sample
+setwd("~/spatial_patterns/shp")
+val_central <- terra::vect("control_sample_central.shp")
+
+## Verification
+cat("=== Central: validation composition ===\n")
+print(table(val_central$CID))
+cat("Total points:", nrow(val_central), "\n\n")
+
+## Extract predictions from the raster
+val_pred_central <- terra::extract(relprob_central, val_central, ID = FALSE)[, 1]
+
+cat("NA in predictions:", sum(is.na(val_pred_central)), "\n\n")
+
+## Calculate sensitivity, specificity, and AUC
+pred_sites  <- val_pred_central[val_central$CID == 1]
+pred_random <- val_pred_central[val_central$CID == 0]
+
+sens <- mean(pred_sites  > 0.5, na.rm = TRUE) * 100
+spec <- mean(pred_random < 0.5, na.rm = TRUE) * 100
+
+cat("N validation sites:", length(pred_sites), "\n")
+cat("N validation control:", length(pred_random), "\n")
+cat("Sensibility (> 0.5):", round(sens, 1), "%\n")
+cat("Specificity (< 0.5):", round(spec, 1), "%\n")
+
+roc_obj <- roc(
+  response  = c(rep(1, length(pred_sites)), rep(0, length(pred_random))),
+  predictor = c(pred_sites, pred_random),
+  quiet     = TRUE
+)
+cat("AUC:", round(auc(roc_obj), 3), "\n")
+
+
+
+
+
+## export results of three areas
+coef_all <- bind_rows(
+  tidy(mod2_monf)    %>% mutate(Zone = "Monforte"),
+  tidy(mod2_north)   %>% mutate(Zone = "Northern"),
+  tidy(mod2_central) %>% mutate(Zone = "Central")
+) %>%
+  relocate(Zone, .before = term) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 4)))
+
+summary_models <- tibble(
+  Zone        = c("Monforte", "Northern", "Central"),
+  AIC         = c(AIC(mod2_monf), AIC(mod2_north), AIC(mod2_central)),
+  Variables   = c(
+    paste(names(coef(mod2_monf))[-1], collapse = ", "),
+    paste(names(coef(mod2_north))[-1], collapse = ", "),
+    paste(names(coef(mod2_central))[-1], collapse = ", ")
+  ),
+  N_sites     = c(sum(locvals_monf$site == 1),
+                  sum(locvals_north$site == 1),
+                  sum(locvals_central$site == 1)),
+  N_random    = c(sum(locvals_monf$site == 0),
+                  sum(locvals_north$site == 0),
+                  sum(locvals_central$site == 0))
+) %>%
+  mutate(AIC = round(AIC, 2))
+
+print(summary_models)
+
+write_xlsx(
+  list(
+    Coefficients  = coef_all,
+    Summary       = summary_models
+  ),
+  path = "~/outputs/GLM_results_all_zones.xlsx"
+)
+
+
+## Export predictive maps Figure 
+
+## Ensure validation samples are loaded (adjust paths if necessary)
+# val_monf    <- terra::vect("control_sample_monforte.shp")
+# val_north   <- terra::vect("control_sample_northern.shp")
+# val_central <- terra::vect("control_sample_central.shp")
+
+## Rename layers
+names(relprob_monf)    <- "probability"
+names(relprob_north)   <- "probability"
+names(relprob_central) <- "probability"
+
+## Convert training sites to data.frame (CID == 1)
+train_monf_df    <- as.data.frame(locations_monf[locations_monf$CID == 1, ],       geom = "XY")
+train_north_df   <- as.data.frame(locations_north[locations_north$CID == 1, ],     geom = "XY")
+train_central_df <- as.data.frame(locations_central[locations_central$CID == 1, ], geom = "XY")
+
+## Convert control sites to data.frame (CID == 1)
+control_monf_df    <- as.data.frame(val_monf[val_monf$CID == 1, ],       geom = "XY")
+control_north_df   <- as.data.frame(val_north[val_north$CID == 1, ],     geom = "XY")
+control_central_df <- as.data.frame(val_central[val_central$CID == 1, ], geom = "XY")
+
+## Palette and common scales
+pal_arcmap <- c("#7ACBC0", "#E5D598", "#D4D4D4", "#FFFFFF")
+
+common_fill <- scale_fill_gradientn(
+  colors = pal_arcmap,
+  limits = c(0, 1),
+  na.value = "transparent",
+  name   = "GLM"
+)
+
+## Color scale for training and control points
+common_color <- scale_color_manual(
+  values = c("Training sample" = "black", "Control sample" = "red"),
+  name   = NULL
+)
+
+## Common theme (we removed the title alignment here since titles are handled by cowplot)
+common_theme <- theme_minimal(base_size = 10) +
+  theme(
+    panel.grid   = element_blank(),
+    axis.title   = element_blank(),
+    axis.text    = element_blank(),        
+    axis.ticks   = element_blank(),        
+    legend.position = "right"
+  )
+
+## Maps (Remove labs(title) from all three)
+p_monf <- ggplot() +
+  geom_spatraster(data = relprob_monf, aes(fill = probability)) +
+  common_fill +
+  geom_point(data = train_monf_df, aes(x = x, y = y, color = "Training sample"), size = 0.8, shape = 19) +
+  geom_point(data = control_monf_df, aes(x = x, y = y, color = "Control sample"), size = 0.8, shape = 19) +
+  common_color +
+  coord_sf(expand = FALSE) +
+  common_theme +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true",
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"),
+                         style = north_arrow_fancy_orienteering)
+
+p_north <- ggplot() +
+  geom_spatraster(data = relprob_north, aes(fill = probability)) +
+  common_fill +
+  geom_point(data = train_north_df, aes(x = x, y = y, color = "Training sample"), size = 0.8, shape = 19) +
+  geom_point(data = control_north_df, aes(x = x, y = y, color = "Control sample"), size = 0.8, shape = 19) +
+  common_color +
+  coord_sf(expand = FALSE) +
+  common_theme +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true",
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"),
+                         style = north_arrow_fancy_orienteering)
+
+p_central <- ggplot() +
+  geom_spatraster(data = relprob_central, aes(fill = probability)) +
+  common_fill +
+  geom_point(data = train_central_df, aes(x = x, y = y, color = "Training sample"), size = 0.8, shape = 19) +
+  geom_point(data = control_central_df, aes(x = x, y = y, color = "Control sample"), size = 0.8, shape = 19) +
+  common_color +
+  coord_sf(expand = FALSE) +
+  common_theme +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true",
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"),
+                         style = north_arrow_fancy_orienteering)
+
+## Composition (Combine letter and title in the labels argument)
+combined <- plot_grid(
+  p_monf, p_north, p_central,
+  nrow = 1,
+  labels = c("a   Monforte de Lemos basin",
+             "b   Northern Mountain ranges",
+             "c   Central Mountain ranges"),
+  label_size = 12,
+  label_fontface = "bold",
+  hjust = 0,   # Aligns text to the left
+  vjust = 1    # Aligns text to the top
+)
+
+## Save PNG
+setwd("~/spatial_patterns/outputs")
+
+ggsave("Figure_GLM_maps_composite.png",
+       plot   = combined,
+       width  = 18,
+       height = 6,
+       units  = "in",
+       dpi    = 300)
+
+## Save PDF
+ggsave("Figure_GLM_maps_composite.pdf",
+       plot   = combined,
+       width  = 18,
+       height = 6,
+       units  = "in")
+```
+
+## Kernel Density Estimations
+
+Kernel density estimations were generated to visually compare the distribution of environmental variables at archaeological sites against 999 Monte Carlo resamples of the background landscape.
+
+```{r}
+# Kernel Density Estimation - Northern area
+
+## add the sites
+setwd("~/spatial_patterns/shp")
+sites_north <- terra::vect("sites_northern.shp")
+
+## Kernel density Function + MWU for each variable
+kernel_density_plot <- function(raster_file, sites, variable_name,
+                                area_name, n_iter = 999, n_grid = 256) {
+  
+  r <- terra::rast(raster_file)
+  
+  ## Force sites to the raster CRS (removes [extract] transforming warning)
+  sites <- terra::project(sites, terra::crs(r))
+  
+  ## Sites values
+  site_values <- terra::extract(r, sites, ID = FALSE)[, 1]
+  site_values <- site_values[!is.na(site_values)]
+  n_sites <- length(site_values)
+  
+  ## Check variation (e.g., CPFPCDc all zero in Northern)
+  no_variation <- diff(range(site_values)) == 0
+  if (no_variation) {
+    warning("Variable ", variable_name, ": sites have no variation (all = ",
+            unique(site_values)[1], "). MWU will be skipped.")
+  }
+  
+  ## Background values (entire area, rasters already cropped)
+  background_values <- terra::values(r, mat = FALSE, na.rm = TRUE)
+  
+  ## Common range for density
+  rng <- range(background_values, na.rm = TRUE)
+  
+  ## Sites density
+  dens_sites <- density(site_values, from = rng[1], to = rng[2], n = n_grid)
+  sites_df <- data.frame(x = dens_sites$x, y = dens_sites$y * n_sites)
+  
+  ## 999 background simulations
+  bg_dens <- replicate(n_iter, {
+    sample_vals <- sample(background_values, n_sites, replace = FALSE)
+    d <- density(sample_vals, from = rng[1], to = rng[2], n = n_grid)
+    data.frame(x = d$x, y = d$y * n_sites)
+  }, simplify = FALSE)
+  
+  bg_df <- bind_rows(bg_dens) %>%
+    group_by(x) %>%
+    summarise(
+      lower  = quantile(y, 0.025),
+      median = quantile(y, 0.5),
+      upper  = quantile(y, 0.975),
+      .groups = "drop"
+    )
+  
+  ## Plot
+  p <- ggplot() +
+    geom_line(data = bg_df, aes(x = x, y = median)) +
+    geom_ribbon(data = bg_df, aes(x = x, ymin = lower, ymax = upper),
+                alpha = 0.3) +
+    geom_line(data = sites_df, aes(x = x, y = y), color = "red") +
+    labs(title = paste0(variable_name, " in ", area_name),
+         x = variable_name, y = "Frequency") +
+    theme_bw()
+  
+  ## MWU companion (skipped if no variation)
+  if (no_variation) {
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = c(NA_real_, NA_real_),
+      Median = c(NA_real_, NA_real_),
+      Upper  = c(NA_real_, NA_real_)
+    )
+  } else {
+    mwu <- replicate(n_iter, {
+      sample_vals <- sample(background_values, n_sites, replace = FALSE)
+      wilcox.test(x = site_values, y = sample_vals,
+                  alternative = "two.sided", exact = FALSE) %>%
+        broom::tidy()
+    }, simplify = FALSE) %>%
+      bind_rows()
+    
+    mwu <- mwu[, c("statistic", "p.value")]   # subsetting, evita terra::select
+    
+    ## Safety net: drop any non-finite values
+    mwu_clean <- mwu[is.finite(mwu$statistic) & is.finite(mwu$p.value), ]
+    
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = as.numeric(c(quantile(mwu_clean$statistic, 0.025, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.025, na.rm = TRUE))),
+      Median = as.numeric(c(median(mwu_clean$statistic, na.rm = TRUE),
+                            median(mwu_clean$p.value,   na.rm = TRUE))),
+      Upper  = as.numeric(c(quantile(mwu_clean$statistic, 0.975, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.975, na.rm = TRUE)))
+    )
+  }
+  
+  list(plot = p, mwu = mwu_summary, sites = sites_df, background = bg_df)
+}
+
+setwd("~/spatial_patterns/grids")
+
+## List of variables (19)
+variables <- list(
+  ALTA    = "ALTA_northern.tif",
+  TPI100  = "TPI100_northern.asc",
+  TPI500  = "TPI500_northern.asc",
+  TPI1000 = "TPI1000_northern.asc",
+  SLO     = "SLO_northern.tif",
+  ASP     = "ASP_northern.tif",
+  HYDROE  = "HYDROE_northern.tif",
+  HYDROC  = "HYDROC_northern.tif",
+  WET     = "WET_northern.tif",
+  GEOLE   = "GEOLE_northern.tif",
+  GEOLC   = "GEOLC_northern.tif",
+  VISPR   = "VISPR_northern.tif",
+  LCPC    = "LCPC_northern.tif",
+  TOTINS  = "TOTINS_northern.asc",
+  DIRINS  = "DIRINS_northern.asc",
+  DIFINS  = "DIFINS_northern.asc",
+  WIND    = "WIND_northern.asc",
+  CPFPCGc = "CPFPCGc_northern.tif",
+  CPFPCDc = "CPFPCDc_northern.tif"
+)
+
+## Run for all variables
+set.seed(123)
+results_north <- lapply(names(variables), function(v) {
+  cat("Processing:", v, "\n")
+  kernel_density_plot(variables[[v]], sites_north, v, "Northern")
+})
+names(results_north) <- names(variables)
+
+## Save individual figures
+setwd("~/spatial_patterns/outputs")
+for (v in names(results_north)) {
+  ggsave(paste0("Figure", v, "-Northern.png"),
+         plot = results_north[[v]]$plot,
+         width = 8, height = 4, dpi = 150)
+}
+
+## Save MWU results (companion of the plots)
+mwu_table <- bind_rows(
+  lapply(names(results_north), function(v) {
+    results_north[[v]]$mwu %>% mutate(Variable = v, .before = 1)
+  })
+)
+write.csv(mwu_table, "MWU_kernel_northern.csv", row.names = FALSE)
+
+## Composite figures - 4 panels: 5 + 5 + 5 + 4
+vars_all <- names(results_north)
+
+groups <- list(
+  Part1 = vars_all[1:5],
+  Part2 = vars_all[6:10],
+  Part3 = vars_all[11:15],
+  Part4 = vars_all[16:19]
+)
+
+for (g in names(groups)) {
+  plots_g <- lapply(groups[[g]], function(v) {
+    results_north[[v]]$plot +
+      theme(legend.position = "none")
+  })
+  
+  combined <- wrap_plots(plots_g, ncol = 2) +
+    plot_annotation(tag_levels = "a")
+  
+  ggsave(
+    filename = paste0("FigureS_KDE_Northern_", g, ".png"),
+    plot     = combined,
+    width    = 12,
+    height   = 10,
+    dpi      = 300
+  )
+}
+
+cat("\n=== Composite figures saved in:\n", getwd(), "\n")
+
+
+
+# Kernel Density Estimation - Monforte
+
+## add the sites
+setwd("~/spatial_patterns/shp")
+sites_monf <- terra::vect("sites_monforte.shp")
+
+## Kernel density Function + MWU for each variable
+kernel_density_plot <- function(raster_file, sites, variable_name,
+                                area_name, n_iter = 999, n_grid = 256) {
+  
+  r <- terra::rast(raster_file)
+  
+  ## Force sites to the raster CRS
+  sites <- terra::project(sites, terra::crs(r))
+  
+  ## Sites values
+  site_values <- terra::extract(r, sites, ID = FALSE)[, 1]
+  site_values <- site_values[!is.na(site_values)]
+  n_sites <- length(site_values)
+  
+  ## Check variation
+  no_variation <- diff(range(site_values)) == 0
+  if (no_variation) {
+    warning("Variable ", variable_name, ": sites have no variation (all = ",
+            unique(site_values)[1], "). MWU will be skipped.")
+  }
+  
+  ## Background values
+  background_values <- terra::values(r, mat = FALSE, na.rm = TRUE)
+  rng <- range(background_values, na.rm = TRUE)
+  
+  ## Sites density
+  dens_sites <- density(site_values, from = rng[1], to = rng[2], n = n_grid)
+  sites_df <- data.frame(x = dens_sites$x, y = dens_sites$y * n_sites)
+  
+  ## 999 background simulations
+  bg_dens <- replicate(n_iter, {
+    sample_vals <- sample(background_values, n_sites, replace = FALSE)
+    d <- density(sample_vals, from = rng[1], to = rng[2], n = n_grid)
+    data.frame(x = d$x, y = d$y * n_sites)
+  }, simplify = FALSE)
+  
+  bg_df <- bind_rows(bg_dens) %>%
+    group_by(x) %>%
+    summarise(
+      lower  = quantile(y, 0.025),
+      median = quantile(y, 0.5),
+      upper  = quantile(y, 0.975),
+      .groups = "drop"
+    )
+  
+  ## Plot
+  p <- ggplot() +
+    geom_line(data = bg_df, aes(x = x, y = median)) +
+    geom_ribbon(data = bg_df, aes(x = x, ymin = lower, ymax = upper),
+                alpha = 0.3) +
+    geom_line(data = sites_df, aes(x = x, y = y), color = "red") +
+    labs(title = paste0(variable_name, " in ", area_name),
+         x = variable_name, y = "Frequency") +
+    theme_bw()
+  
+  ## MWU companion
+  if (no_variation) {
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = c(NA_real_, NA_real_),
+      Median = c(NA_real_, NA_real_),
+      Upper  = c(NA_real_, NA_real_)
+    )
+  } else {
+    mwu <- replicate(n_iter, {
+      sample_vals <- sample(background_values, n_sites, replace = FALSE)
+      wilcox.test(x = site_values, y = sample_vals,
+                  alternative = "two.sided", exact = FALSE) %>%
+        broom::tidy()
+    }, simplify = FALSE) %>%
+      bind_rows()
+    
+    mwu <- mwu[, c("statistic", "p.value")]
+    mwu_clean <- mwu[is.finite(mwu$statistic) & is.finite(mwu$p.value), ]
+    
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = as.numeric(c(quantile(mwu_clean$statistic, 0.025, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.025, na.rm = TRUE))),
+      Median = as.numeric(c(median(mwu_clean$statistic, na.rm = TRUE),
+                            median(mwu_clean$p.value,   na.rm = TRUE))),
+      Upper  = as.numeric(c(quantile(mwu_clean$statistic, 0.975, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.975, na.rm = TRUE)))
+    )
+  }
+  
+  list(plot = p, mwu = mwu_summary, sites = sites_df, background = bg_df)
+}
+
+setwd("~/spatial_patterns/grids")
+
+## List of variables (19)
+variables <- list(
+  ALTA    = "ALTA_monforte.tif",
+  TPI100  = "TPI100_monforte.asc",
+  TPI500  = "TPI500_monforte.asc",
+  TPI1000 = "TPI1000_monforte.asc",
+  SLO     = "SLO_monforte.tif",
+  ASP     = "ASP_monforte.tif",
+  HYDROE  = "HYDROE_monforte.tif",
+  HYDROC  = "HYDROC_monforte.tiff",     
+  WET     = "WET_monforte.tiff",        
+  GEOLE   = "GEOLE_monforte.tif",
+  GEOLC   = "GEOLC_monforte.tiff",      
+  VISPR   = "VISPR_monforte.tif",
+  LCPC    = "LCPC_monforte.tiff",       
+  TOTINS  = "TOTINS_monforte.asc",
+  DIRINS  = "DIRINS_monforte.asc",
+  DIFINS  = "DIFINS_monforte.asc",
+  WIND    = "WIND_monforte.asc",
+  CPFPCGc = "CPFPCGc_monforte.tif",
+  CPFPCDc = "CPFPCDc_monforte.tif"
+)
+
+## Run for all variables
+set.seed(123)
+results_monf <- lapply(names(variables), function(v) {
+  cat("Processing:", v, "\n")
+  kernel_density_plot(variables[[v]], sites_monf, v, "Monforte")
+})
+names(results_monf) <- names(variables)
+
+## Save individual figures
+setwd("~/spatial_patterns/outputs")
+for (v in names(results_monf)) {
+  ggsave(paste0("Figure", v, "-Monforte.png"),
+         plot = results_monf[[v]]$plot,
+         width = 8, height = 4, dpi = 150)
+}
+
+## Save MWU results
+mwu_table_monf <- bind_rows(
+  lapply(names(results_monf), function(v) {
+    results_monf[[v]]$mwu %>% mutate(Variable = v, .before = 1)
+  })
+)
+write.csv(mwu_table_monf, "MWU_kernel_monforte.csv", row.names = FALSE)
+
+
+## Composite figures - 4 panels: 5 + 5 + 5 + 4
+vars_all <- names(results_monf)
+
+groups <- list(
+  Part1 = vars_all[1:5],
+  Part2 = vars_all[6:10],
+  Part3 = vars_all[11:15],
+  Part4 = vars_all[16:19]
+)
+
+for (g in names(groups)) {
+  plots_g <- lapply(groups[[g]], function(v) {
+    results_monf[[v]]$plot +
+      theme(legend.position = "none")
+  })
+  
+  combined <- wrap_plots(plots_g, ncol = 2) +
+    plot_annotation(tag_levels = "a")
+  
+  ggsave(
+    filename = paste0("FigureS_KDE_Monforte_", g, ".png"),
+    plot     = combined,
+    width    = 12,
+    height   = 10,
+    dpi      = 300
+  )
+}
+
+cat("\n=== Composite figures saved in:\n", getwd(), "\n")
+
+
+
+
+# Kernel Density Estimation - Central
+
+## add the sites
+setwd("~/spatial_patterns/shp")
+sites_central <- terra::vect("sites_central.shp")
+
+## Kernel density Function + MWU for each variable
+kernel_density_plot <- function(raster_file, sites, variable_name,
+                                area_name, n_iter = 999, n_grid = 256) {
+  
+  r <- terra::rast(raster_file)
+  
+  ## Force sites to the raster CRS
+  sites <- terra::project(sites, terra::crs(r))
+  
+  ## Sites values
+  site_values <- terra::extract(r, sites, ID = FALSE)[, 1]
+  site_values <- site_values[!is.na(site_values)]
+  n_sites <- length(site_values)
+  
+  ## Check variation
+  no_variation <- diff(range(site_values)) == 0
+  if (no_variation) {
+    warning("Variable ", variable_name, ": sites have no variation (all = ",
+            unique(site_values)[1], "). MWU will be skipped.")
+  }
+  
+  ## Background values
+  background_values <- terra::values(r, mat = FALSE, na.rm = TRUE)
+  rng <- range(background_values, na.rm = TRUE)
+  
+  ## Sites density
+  dens_sites <- density(site_values, from = rng[1], to = rng[2], n = n_grid)
+  sites_df <- data.frame(x = dens_sites$x, y = dens_sites$y * n_sites)
+  
+  ## 999 background simulations
+  bg_dens <- replicate(n_iter, {
+    sample_vals <- sample(background_values, n_sites, replace = FALSE)
+    d <- density(sample_vals, from = rng[1], to = rng[2], n = n_grid)
+    data.frame(x = d$x, y = d$y * n_sites)
+  }, simplify = FALSE)
+  
+  bg_df <- bind_rows(bg_dens) %>%
+    group_by(x) %>%
+    summarise(
+      lower  = quantile(y, 0.025),
+      median = quantile(y, 0.5),
+      upper  = quantile(y, 0.975),
+      .groups = "drop"
+    )
+  
+  ## Plot
+  p <- ggplot() +
+    geom_line(data = bg_df, aes(x = x, y = median)) +
+    geom_ribbon(data = bg_df, aes(x = x, ymin = lower, ymax = upper),
+                alpha = 0.3) +
+    geom_line(data = sites_df, aes(x = x, y = y), color = "red") +
+    labs(title = paste0(variable_name, " in ", area_name),
+         x = variable_name, y = "Frequency") +
+    theme_bw()
+  
+  ## MWU companion
+  if (no_variation) {
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = c(NA_real_, NA_real_),
+      Median = c(NA_real_, NA_real_),
+      Upper  = c(NA_real_, NA_real_)
+    )
+  } else {
+    mwu <- replicate(n_iter, {
+      sample_vals <- sample(background_values, n_sites, replace = FALSE)
+      wilcox.test(x = site_values, y = sample_vals,
+                  alternative = "two.sided", exact = FALSE) %>%
+        broom::tidy()
+    }, simplify = FALSE) %>%
+      bind_rows()
+    
+    mwu <- mwu[, c("statistic", "p.value")]
+    mwu_clean <- mwu[is.finite(mwu$statistic) & is.finite(mwu$p.value), ]
+    
+    mwu_summary <- data.frame(
+      Metric = c("U statistic", "p-value"),
+      Lower  = as.numeric(c(quantile(mwu_clean$statistic, 0.025, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.025, na.rm = TRUE))),
+      Median = as.numeric(c(median(mwu_clean$statistic, na.rm = TRUE),
+                            median(mwu_clean$p.value,   na.rm = TRUE))),
+      Upper  = as.numeric(c(quantile(mwu_clean$statistic, 0.975, na.rm = TRUE),
+                            quantile(mwu_clean$p.value,   0.975, na.rm = TRUE)))
+    )
+  }
+  
+  list(plot = p, mwu = mwu_summary, sites = sites_df, background = bg_df)
+}
+
+setwd("~/spatial_patterns/grids")
+
+## List of variables (19) — AJUSTA EXTENSIONES SEGÚN PASO 0
+variables <- list(
+  ALTA    = "ALTA_central.tif",
+  TPI100  = "TPI100_central.asc",
+  TPI500  = "TPI500_central.asc",
+  TPI1000 = "TPI1000_central.asc",
+  SLO     = "SLO_central.tif",
+  ASP     = "ASP_central.tif",
+  HYDROE  = "HYDROE_central.tif",
+  HYDROC  = "HYDROC_central.tif",
+  WET     = "WET_central.tif",
+  GEOLE   = "GEOLE_central.tif",
+  GEOLC   = "GEOLC_central.tif",
+  VISPR   = "VISPR_central.tif",
+  LCPC    = "LCPC_central.tif",
+  TOTINS  = "TOTINS_central.asc",
+  DIRINS  = "DIRINS_central.asc",
+  DIFINS  = "DIFINS_central.asc",
+  WIND    = "WIND_central.asc",
+  CPFPCGc = "CPFPCGc_central.tif",
+  CPFPCDc = "CPFPCDc_central.tif"
+)
+
+## Run for all variables
+set.seed(123)
+results_central <- lapply(names(variables), function(v) {
+  cat("Processing:", v, "\n")
+  kernel_density_plot(variables[[v]], sites_central, v, "Central")
+})
+names(results_central) <- names(variables)
+
+## Save individual figures
+setwd("~/spatial_patterns/outputs")
+for (v in names(results_central)) {
+  ggsave(paste0("Figure", v, "-Central.png"),
+         plot = results_central[[v]]$plot,
+         width = 8, height = 4, dpi = 150)
+}
+
+## Save MWU results
+mwu_table_central <- bind_rows(
+  lapply(names(results_central), function(v) {
+    results_central[[v]]$mwu %>% mutate(Variable = v, .before = 1)
+  })
+)
+write.csv(mwu_table_central, "MWU_kernel_central.csv", row.names = FALSE)
+
+
+## Composite figures - 4 panels: 5 + 5 + 5 + 4
+vars_all <- names(results_central)
+
+groups <- list(
+  Part1 = vars_all[1:5],
+  Part2 = vars_all[6:10],
+  Part3 = vars_all[11:15],
+  Part4 = vars_all[16:19]
+)
+
+for (g in names(groups)) {
+  plots_g <- lapply(groups[[g]], function(v) {
+    results_central[[v]]$plot +
+      theme(legend.position = "none")
+  })
+  
+  combined <- wrap_plots(plots_g, ncol = 2) +
+    plot_annotation(tag_levels = "a")
+  
+  ggsave(
+    filename = paste0("FigureS_KDE_Central_", g, ".png"),
+    plot     = combined,
+    width    = 12,
+    height   = 10,
+    dpi      = 300
+  )
+}
+
+cat("\n=== Composite figures saved in:\n", getwd(), "\n")
+```
+
+## Refinement
+
+Spatial point pattern analysis and inhomogeneous Pair Correlation Functions (PCF) were applied to evaluate the extent to which first-order environmental variables and second-order spatial interactions explain site clustering.
+
+```{r}
+# Refinement Monforte
+
+# set the working directory
+setwd("~/spatial_patterns/shp")
+
+# Load vector data
+gg <- st_read("sites_monforte.shp", quiet = TRUE)
+
+p <- st_read("area_monforte.shp", quiet = TRUE)
+
+wind <- as.owin(p)
+
+gp <- unmark(as.ppp(gg))
+
+gpw <- gp[wind]
+
+# Load and prepare raster data
+
+# set de wd
+setwd("~/spatial_patterns/grids")
+
+dem <- raster("ALTA_monforte.tif")
+slo <- raster("SLO_monforte.tif")
+vis <- raster("VISPR_monforte.tif")
+
+slo <- resample(slo, dem)
+vis <- resample(vis, dem)
+
+rs <- stack(dem, slo, vis)  
+
+removeCollinearity(rs, multicollinearity.cutoff = 0.75,
+                   select.variables = FALSE, sample.points = TRUE, nb.points = 100000,
+                   plot = TRUE) # No collinear variables
+
+gvars <- list(as.im(as(dem, "SpatialGridDataFrame")),
+              as.im(as(slo, "SpatialGridDataFrame")),
+              as.im(as(vis, "SpatialGridDataFrame")))
+
+names(gvars) <- c("dem", "slo", "vis")
+
+rm(dem)
+rm(slo)
+rm(vis)
+rm(rs)
+
+# Extract data frame
+
+marea <- as.ppp(gg)
+datproj <- as.data.frame(marea)
+
+## Analysis: Model fitting
+
+# First order
+
+gtrend <- ~ dem + slo + vis # Define spatial trend
+
+fitgg <- step(ppm(gpw, trend = gtrend, covariates=gvars, correction = "iso", method="logi"), k=log(5))
+
+summary(fitgg)
+
+# First and second order
+
+gatrend <- ~ dem + slo + vis
+
+ir <- data.frame(r=seq(100, 2500, by=100))
+
+fitgg2 <- profilepl(ir, f=AreaInter, gpw, aic=TRUE, fast=TRUE, covariates=gvars, trend=gatrend, verbose=TRUE)
+
+# profilepl() is used over ppm() due to the lack of parallelisation of this function
+# and hence the extreme length of time it takes to fit and output. Results are equivalent.
+
+pt <- as.ppm(fitgg2)
+
+## Analysis: Model testing
+
+# Based on 999 simulations of CSR - this may take a while to run.
+
+# Null
+
+null <- envelope(gpw, fun = pcfinhom, nsim = 999, correction = "iso", divisor="d")
+
+# First order 
+
+gsimfit <- envelope(fitgg, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d")
+
+# First and second order
+
+gsimfit2 <- envelope(pt, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d", method="logi")
+
+
+# create heterogenous pattern
+null_model_hetero <- rheteroppp(gpw, nsim = 999)
+
+hetero <- envelope(gpw, fun = pcf, 
+                   funargs = list(correction = "Ripley", divisor = "d"),
+                   simulate = null_model_hetero, nsim = 999, 
+                   verbose = FALSE)
+
+
+# Create Figure ginhom function
+p1 <- plot_quantums(hetero, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="a. Simulated heterogeneous pattern model") 
+
+p2 <- plot_quantums(null, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="b. Null model") 
+
+p3 <- plot_quantums(gsimfit, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="c. First-order effects model") 
+
+p4 <- plot_quantums(gsimfit2, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="d. First and second-order effects model") 
+
+(p1| p2) /
+  (p3| p4) 
+
+
+
+
+
+# Refinement Northern
+
+# set the working directory
+setwd("~/spatial_patterns/shp")
+
+# Load vector data
+gg <- st_read("sites_northern.shp", quiet = TRUE)
+
+p <- st_read("area_northern.shp", quiet = TRUE)
+
+wind <- as.owin(p)
+
+gp <- unmark(as.ppp(gg))
+
+gpw <- gp[wind]
+
+# Load and prepare raster data
+
+# set de wd
+setwd("~/spatial_patterns/grids")
+
+dem <- raster("ALTA_northern.tif")
+tpi <- raster("TPI100_northern.asc")
+geo <- raster("GEOLC_northern.tif")
+
+tpi <- resample(tpi, dem)
+geo <- resample(geo, dem)
+
+rs <- stack(dem, tpi, geo)  
+
+removeCollinearity(rs, multicollinearity.cutoff = 0.75,
+                   select.variables = FALSE, sample.points = TRUE, nb.points = 100000,
+                   plot = TRUE) # No collinear variables
+
+gvars <- list(as.im(as(dem, "SpatialGridDataFrame")),
+              as.im(as(tpi, "SpatialGridDataFrame")),
+              as.im(as(geo, "SpatialGridDataFrame")))
+
+names(gvars) <- c("dem", "tpi", "geo")
+
+rm(dem)
+rm(tpi)
+rm(geo)
+rm(rs)
+
+# Extract data frame
+
+marea <- as.ppp(gg)
+datproj <- as.data.frame(marea)
+
+## Analysis: Model fitting
+
+# First order
+
+gtrend <- ~ dem + tpi + geo # Define spatial trend
+
+fitgg <- step(ppm(gpw, trend = gtrend, covariates=gvars, correction = "iso", method="logi"), k=log(5))
+
+summary(fitgg)
+
+# First and second order
+
+gatrend <- ~ dem + tpi + geo
+
+ir <- data.frame(r=seq(100, 2500, by=100))
+
+fitgg2 <- profilepl(ir, f=AreaInter, gpw, aic=TRUE, fast=TRUE, covariates=gvars, trend=gatrend, verbose=TRUE)
+
+# profilepl() is used over ppm() due to the lack of parallelisation of this function
+# and hence the extreme length of time it takes to fit and output. Results are equivalent.
+
+pt <- as.ppm(fitgg2)
+
+## Analysis: Model testing
+
+# Based on 999 simulations of CSR - this may take a while to run.
+
+# Null
+
+null <- envelope(gpw, fun = pcfinhom, nsim = 999, correction = "iso", divisor="d")
+
+# First order 
+
+gsimfit <- envelope(fitgg, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d")
+
+# First and second order
+
+gsimfit2 <- envelope(pt, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d", method="logi")
+
+
+# create heterogenous pattern
+null_model_hetero <- rheteroppp(gpw, nsim = 999)
+
+hetero <- envelope(gpw, fun = pcf, 
+                   funargs = list(correction = "Ripley", divisor = "d"),
+                   simulate = null_model_hetero, nsim = 999, 
+                   verbose = FALSE)
+
+
+# Create Figure ginhom function
+p1 <- plot_quantums(hetero, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="a. Simulated heterogeneous pattern model") 
+
+p2 <- plot_quantums(null, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="b. Null model") 
+
+p3 <- plot_quantums(gsimfit, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="c. First-order effects model") 
+
+p4 <- plot_quantums(gsimfit2, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="d. First and second-order effects model") 
+
+(p1| p2) /
+  (p3| p4) 
+
+
+
+
+
+# Refinement Central
+
+# set the working directory
+setwd("~/spatial_patterns/shp")
+
+# Load vector data
+gg <- st_read("sites_central.shp", quiet = TRUE)
+
+p <- st_read("area_central.shp", quiet = TRUE)
+
+wind <- as.owin(p)
+
+gp <- unmark(as.ppp(gg))
+
+gpw <- gp[wind]
+
+# Load and prepare raster data
+
+# set de wd
+setwd("~/spatial_patterns/grids")
+
+dem <- raster("ALTA_central.tif")
+tpi <- raster("TPI1000_central.asc")
+geo <- raster("GEOLC_central.tif")
+
+tpi <- resample(tpi, dem)
+geo <- resample(geo, dem)
+
+rs <- stack(dem, tpi, geo)  
+
+removeCollinearity(rs, multicollinearity.cutoff = 0.75,
+                   select.variables = FALSE, sample.points = TRUE, nb.points = 100000,
+                   plot = TRUE) # No collinear variables
+
+gvars <- list(as.im(as(dem, "SpatialGridDataFrame")),
+              as.im(as(tpi, "SpatialGridDataFrame")),
+              as.im(as(geo, "SpatialGridDataFrame")))
+
+names(gvars) <- c("dem", "tpi", "geo")
+
+rm(dem)
+rm(tpi)
+rm(geo)
+rm(rs)
+
+# Extract data frame
+
+marea <- as.ppp(gg)
+datproj <- as.data.frame(marea)
+
+## Analysis: Model fitting
+
+# First order
+
+gtrend <- ~ dem + tpi + geo # Define spatial trend
+
+fitgg <- step(ppm(gpw, trend = gtrend, covariates=gvars, correction = "iso", method="logi"), k=log(5))
+
+summary(fitgg)
+
+# First and second order
+
+gatrend <- ~ dem + tpi + geo
+
+ir <- data.frame(r=seq(100, 2500, by=100))
+
+fitgg2 <- profilepl(ir, f=AreaInter, gpw, aic=TRUE, fast=TRUE, covariates=gvars, trend=gatrend, verbose=TRUE)
+
+# profilepl() is used over ppm() due to the lack of parallelisation of this function
+# and hence the extreme length of time it takes to fit and output. Results are equivalent.
+
+pt <- as.ppm(fitgg2)
+
+## Analysis: Model testing
+
+# Based on 999 simulations of CSR - this may take a while to run.
+
+# Null
+
+null <- envelope(gpw, fun = pcfinhom, nsim = 999, correction = "iso", divisor="d")
+
+# First order 
+
+gsimfit <- envelope(fitgg, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d")
+
+# First and second order
+
+gsimfit2 <- envelope(pt, fun = pcfinhom, nsim = 999, correction="iso", divisor = "d", method="logi")
+
+
+# create heterogenous pattern
+null_model_hetero <- rheteroppp(gpw, nsim = 999)
+
+hetero <- envelope(gpw, fun = pcf, 
+                   funargs = list(correction = "Ripley", divisor = "d"),
+                   simulate = null_model_hetero, nsim = 999, 
+                   verbose = FALSE)
+
+
+# Create Figure ginhom function
+p1 <- plot_quantums(hetero, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="a. Simulated heterogeneous pattern model") 
+
+p2 <- plot_quantums(null, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="b. Null model") 
+
+p3 <- plot_quantums(gsimfit, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="c. First-order effects model") 
+
+p4 <- plot_quantums(gsimfit2, 
+                    xlab = "Distance between points (r)",
+                    ylab = "ginhom(r)",
+                    labels=c("Regular pattern", 
+                             "Random pattern", 
+                             "Clustered pattern"),
+                    title="d. First and second-order effects model") 
+
+(p1| p2) /
+  (p3| p4) 
+```
