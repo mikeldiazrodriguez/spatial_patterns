@@ -17,19 +17,12 @@
 # author (Mikel Díaz-Rodríguez) from several sources. Portions of the code
 # are adapted from:
 #
-# - Marwick, B. (2018). How To Do Archaeological Science Using R.
-#   Available at: https://benmarwick.github.io/How-To-Do-Archaeological-Science-Using-R/
+# - **Carrero-Pazos, M., Bevan, A., & Lake, M. W.** (2019). The spatial structure of Galician megalithic landscapes (NW Iberia): A case study from the Monte Penide region. *Journal of Archaeological Science*, 108. https://doi.org/10.1016/J.JAS.2019.05.004 
+# - **Díaz-Rodríguez, M.** (2024). Living in the Mountains. Settlement patterns in Northwestern Iberia during the Palaeolithic period. *Archaeological and Anthropological Sciences*, 137. https://doi.org/10.1007/s12520-024-02049-7 
+# - **Díaz-Rodríguez, M, Fábregas-Valcarce, R., & Pérez-Alberti, A.** (2023). A predictive model for Palaeolithic sites: A case study of Monforte de Lemos basin, NW Iberian Peninsula. *Journal of Archaeological Science: Reports*, 49. https://doi.org/10.1016/j.jasrep.2023.104012 
+# - **Marwick, B.** (2018). *How To Do Archaeological Science Using R*. Available at: [https://benmarwick.github.io/How-To-Do-Archaeological-Science-Using-R/](https://benmarwick.github.io/How-To-Do-Archaeological-Science-Using-R/)
+# - **Riris, P.** (2020). Spatial structure among the geometric earthworks of western Amazonia (Acre, Brazil). *Journal of Anthropological Archaeology*, 59, 101177. https://doi.org/10.1016/j.jaa.2020.101177 
 #
-# - Riris, P. (2020). Spatial structure among the geometric earthworks of
-#   western Amazonia (Acre, Brazil). Journal of Anthropological Archaeology,
-#   59, 101177. https://doi.org/10.1016/j.jaa.2020.101177
-#   (For the Monte Carlo and Kernel Density Estimation approaches).
-#
-# - Carrero-Pazos, M., Bevan, A., & Lake, M. W. (2019). The spatial structure
-#   of Galician megalithic landscapes (NW Iberia): A case study from the
-#   Monte Penide region. Journal of Archaeological Science, 108.
-#   https://doi.org/10.1016/J.JAS.2019.05.004
-#   (For the spatial analysis workflow).
 #
 # Any errors or adaptations are the sole responsibility of the author.
 
@@ -87,8 +80,8 @@ shapiro.test(sitesSubM$UTMX)
 ### Normality test for random sites
 shapiro.test(random_sites_monforte$UTMX)
 
-### If the alternative hypothesis is accepted, the points do not follow a normal distribution. To verify this, the K-S Test is used.
-### K-S is a non-parametric test to check if the points of both samples belong to the same population.
+### If the alternative hypothesis is accepted, the data do not follow a normal distribution.
+### Since the data are not normal, the non-parametric K-S test is used to check whether sites and random points belong to the same population.
 ks.test(sitesSubM$UTMX,random_sites_monforte$UTMX)
 
 
@@ -116,7 +109,7 @@ ks.test(sitesSubC$utmx,random_sites_central$utmx)
 
 
 
-# Person’s Correlation function
+# Pearson’s correlation function
 ## change your working directory
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/csv")
 
@@ -186,7 +179,7 @@ sitesSubN.ppp  <- ppp(x = sitesSubN$utmx, y = sitesSubN$utmy, window = window_no
 ## set the working directory
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
 
-## Import variables and set the same extent for everyone
+## Import variables and set the same extent for all rasters
 
 ALTA_northern <- terra::rast("ALTA_northern.tif")
 
@@ -232,7 +225,7 @@ CPFPCDc_northern <- raster("CPFPCDc_northern.tif")
 ## add rasters
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
 
-## Import variables and set the same extent for everyone
+## Import variables and set the same extent for all rasters
 ALTA_northern    <- rast("ALTA_northern.tif")
 TPI100_northern  <- rast("TPI100_northern.asc")
 TPI500_northern  <- rast("TPI500_northern.asc")
@@ -336,7 +329,7 @@ mwu_results <- foreach(n = 1:n_iter, .combine = rbind) %do% {
 } %>%
   dplyr::select(statistic, p.value)
   
-# Median and IC 95%
+# Median and 95% CI
 summary_res <- foreach::foreach(prob = c(0.025, 0.5, 0.975), .combine = rbind) %do% {
   mwu_results %>%
     dplyr::summarise_all(quantile, probs = prob)
@@ -368,7 +361,7 @@ print(results_northern)
 ## add rasters
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
 
-## Import variables and set the same extent for everyone
+## Import variables and set the same extent for all rasters
 ALTA_central    <- rast("ALTA_central.tif")
 TPI100_central  <- rast("TPI100_central.asc")
 TPI500_central  <- rast("TPI500_central.asc")
@@ -472,7 +465,7 @@ run_mwu <- function(r, sites_vect, area_vect, n_iter = 999) {
   } %>%
     dplyr::select(statistic, p.value)
   
-  # Median and IC 95%
+  # Median and 95% CI
   summary_res <- foreach::foreach(prob = c(0.025, 0.5, 0.975), .combine = rbind) %do% {
     mwu_results %>%
       dplyr::summarise_all(quantile, probs = prob)
@@ -505,7 +498,7 @@ print(results_central)
 ## add rasters
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
 
-## Import variables and set the same extent for everyone
+## Import variables and set the same extent for all rasters
 ALTA_monforte    <- rast("ALTA_monforte.tif")
 TPI100_monforte  <- rast("TPI100_monforte.asc")
 TPI500_monforte  <- rast("TPI500_monforte.asc")
@@ -559,7 +552,7 @@ variables_monforte <- c("ALTA_monforte", "TPI100_monforte", "TPI500_monforte", "
 # Create the list with those objects
 rasters_monforte <- mget(variables_monforte)
 
-# Rename so that the output table is clean (without "_central")
+# Rename so that the output table is clean (without "_monforte")
 names(rasters_monforte) <- gsub("_monforte$", "", variables_monforte)
 
 
@@ -609,7 +602,7 @@ run_mwu <- function(r, sites_vect, area_vect, n_iter = 999) {
   } %>%
     dplyr::select(statistic, p.value)
   
-  # Median and IC 95%
+  # Median and 95% CI
   summary_res <- foreach::foreach(prob = c(0.025, 0.5, 0.975), .combine = rbind) %do% {
     mwu_results %>%
       dplyr::summarise_all(quantile, probs = prob)
@@ -676,7 +669,7 @@ locvals_monf <- as.data.frame(terra::extract(covariates_monf, locations_monf, ID
 ## Response variable: 1 if the point is an archaeological site
 locvals_monf$site <- as.integer(locations_monf$CID == 1)
 
-## fit de GLM
+## GLM fit
 mod_monf <- glm(site ~ elevation + tot_inso + aspect + slope + visual_prom +
              tpi100 + wetland_cost + geol_cost + hydro_cost + lcp_cost + wind,
            data = locvals_monf, family = binomial(link = "logit"), method = brglm2::brglmFit)
@@ -786,7 +779,7 @@ names(covariates_north) <- c("elevation", "tot_ins",
 locvals_north <- as.data.frame(terra::extract(covariates_north, locations_north, ID = FALSE))
 locvals_north$site <- as.integer(locations_north$CID == 1)
 
-## fit de GLM
+## GLM fit
 mod_north <- glm(site ~ elevation + tot_ins + aspect +
                    slope + vispr + wind +
                    wet  + cost_hydro + lcpc + tpi100 +cost_geol,
@@ -897,7 +890,7 @@ names(covariates_central) <- c("elevation", "tot_ins",
 locvals_central <- as.data.frame(terra::extract(covariates_central, locations_central, ID = FALSE))
 locvals_central$site <- as.integer(locations_central$CID == 1)
 
-## fit de GLM
+## GLM fit
 mod_central <- glm(site ~ elevation + tot_ins + aspect +
                    slope + vispr +
                    wet + 
@@ -1009,11 +1002,6 @@ write_xlsx(
 
 
 ## Export predictive maps Figure 
-
-## Ensure validation samples are loaded (adjust paths if necessary)
-# val_monf    <- terra::vect("control_sample_monforte.shp")
-# val_north   <- terra::vect("control_sample_northern.shp")
-# val_central <- terra::vect("control_sample_central.shp")
 
 ## Rename layers
 names(relprob_monf)    <- "probability"
@@ -1139,7 +1127,7 @@ kernel_density_plot <- function(raster_file, sites, variable_name,
   
   r <- terra::rast(raster_file)
   
-  ## Force sites to the raster CRS (removes [extract] transforming warning)
+  ## Reproject sites to the raster CRS
   sites <- terra::project(sites, terra::crs(r))
   
   ## Sites values
@@ -1207,9 +1195,9 @@ kernel_density_plot <- function(raster_file, sites, variable_name,
     }, simplify = FALSE) %>%
       bind_rows()
     
-    mwu <- mwu[, c("statistic", "p.value")]   # subsetting, evita terra::select
+    mwu <- mwu[, c("statistic", "p.value")]  
     
-    ## Safety net: drop any non-finite values
+    ## Remove non-finite values
     mwu_clean <- mwu[is.finite(mwu$statistic) & is.finite(mwu$p.value), ]
     
     mwu_summary <- data.frame(
@@ -1319,7 +1307,7 @@ kernel_density_plot <- function(raster_file, sites, variable_name,
   
   r <- terra::rast(raster_file)
   
-  ## Force sites to the raster CRS
+  ## Reproject sites to the raster CRS
   sites <- terra::project(sites, terra::crs(r))
   
   ## Sites values
@@ -1582,7 +1570,7 @@ kernel_density_plot <- function(raster_file, sites, variable_name,
 
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
 
-## List of variables (19) — AJUSTA EXTENSIONES SEGÚN PASO 0
+## List of variables (19) 
 variables <- list(
   ALTA    = "ALTA_central.tif",
   TPI100  = "TPI100_central.asc",
@@ -1681,7 +1669,7 @@ gpw <- gp[wind]
 
 # Load and prepare raster data
 
-# set de wd
+# set the working directory
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
 
 dem <- raster("ALTA_monforte.tif")
@@ -1731,14 +1719,14 @@ ir <- data.frame(r=seq(100, 2500, by=100))
 
 fitgg2 <- profilepl(ir, f=AreaInter, gpw, aic=TRUE, fast=TRUE, covariates=gvars, trend=gatrend, verbose=TRUE)
 
-# profilepl() is used over ppm() due to the lack of parallelisation of this function
-# and hence the extreme length of time it takes to fit and output. Results are equivalent.
+# profilepl() used instead of ppm() because the latter is not parallelised
+# and takes too long to fit; results are equivalent.
 
 pt <- as.ppm(fitgg2)
 
 ## Analysis: Model testing
 
-# Based on 999 simulations of CSR - this may take a while to run.
+# Based on 999 simulations of CSR 
 
 # Null
 
@@ -1820,7 +1808,7 @@ gpw <- gp[wind]
 
 # Load and prepare raster data
 
-# set de wd
+# set the working directory
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
 
 dem <- raster("ALTA_northern.tif")
@@ -1877,7 +1865,7 @@ pt <- as.ppm(fitgg2)
 
 ## Analysis: Model testing
 
-# Based on 999 simulations of CSR - this may take a while to run.
+# Based on 999 simulations of CSR 
 
 # Null
 
@@ -1959,7 +1947,7 @@ gpw <- gp[wind]
 
 # Load and prepare raster data
 
-# set de wd
+# set the working directory
 setwd("C:/Users/Mikel/Documents/Curso_2023-2024/Paper_AAS/Github/spatial_patterns/spatial_patterns/grids")
 
 dem <- raster("ALTA_central.tif")
@@ -2016,7 +2004,7 @@ pt <- as.ppm(fitgg2)
 
 ## Analysis: Model testing
 
-# Based on 999 simulations of CSR - this may take a while to run.
+# Based on 999 simulations of CSR 
 
 # Null
 
